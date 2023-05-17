@@ -1,0 +1,14 @@
+*.html
+*.pyc
+*.gif
+*.pdf
+*.xml
+*-checkpoint.ipynb
+__pycache__/*
+*.mlxS
+*.npy.gz
+*.svg
+*.nc
+parcels_examples*
+*.mat
+*.csv
