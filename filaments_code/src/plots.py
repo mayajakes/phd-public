@@ -281,7 +281,7 @@ def sectionsOnP(float_num, floatid, z_max = None, TS = True, UV = False, rs = Tr
         section = calc.findRSperiod(float_num)
         lw = 1
     else:
-        section = slice(0, len(dist))
+        section = slice(0, len(newFloat.distance))
         lw = 0.6
 
     if z_max == None:
@@ -373,8 +373,7 @@ def identifyPF(float_num, floatid, z_max = None, panel = False, ax = None, save_
     dist = newFloat.distance
 
     pdens = calc.potentialDensity(newFloat.pressure, SA, CT)
-    levels = np.arange(26.8,np.nanmax(pdens),0.1)
-    # levels = np.arange(-1,7, 0.5)
+    levels = np.arange(26.8,np.nanmax(pdens),0.2)
 
     if z_max == None:
         z_max = int(float_num.pressure[-1])
@@ -397,11 +396,11 @@ def identifyPF(float_num, floatid, z_max = None, panel = False, ax = None, save_
     CS = pdens[rs].plot.contour(ax = ax, x = 'distance', colors = 'k', linewidths = 1, linestyles = 'solid', levels = levels, alpha = 0.5)
     plt.clabel(CS, inline=True, fontsize=10, fmt = '%1.1f')
 
-    # for j in range(0, len(np.unique(ind))):
-    #     ax.axvline(x = dist[np.unique(ind)[j]], ymin = 0, ymax = 0.07, color = 'red', alpha = 0.8)
+    for j in range(0, len(np.unique(ind))):
+        ax.axvline(x = dist[np.unique(ind)[j]], ymin = 0, ymax = 0.07, color = 'red', alpha = 0.8)
     
-    # ax.axhline(y = 200, color = 'white', linestyle = '--')
-    # ax.axhline(y = 300, color = 'white', linestyle = '--')
+    ax.axhline(y = 200, color = 'white', linestyle = '--')
+    ax.axhline(y = 300, color = 'white', linestyle = '--')
 
     if panel == False: 
         settings.tickLocations(ax)
@@ -446,7 +445,7 @@ def identifySAF(float_num, floatid, z_max = None, panel = False, ax = None, save
     levels = np.arange(26.8,np.nanmax(pdens),0.2)
     
     if panel == False: 
-        fig, ax = plt.subplots(figsize = (10,4))
+        fig, ax = plt.subplots(figsize = (8,3))
     
     # plot salinity shading
     im = newFloat.S[rs].sel(pressure = slice(0,z_max)).plot(ax = ax, x = 'distance', cmap = cmocean.cm.haline, **kwargs, 

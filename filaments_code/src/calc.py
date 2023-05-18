@@ -1101,6 +1101,8 @@ def buoyancy(CT, SA, rho_ref = 'mean'):
 def RiNumber(N2, b, lat, u = None, v = None, window = 55):
     '''Inverse Richardson number (Ri^-1 = f^2 N^2 / b_grad^2), assuming thermal wind balance (Siegelman, 2020). '''
 
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
+    
     f = gsw.f(lat)
     f = np.tile(f, (len(N2.pressure),1)).transpose()
     dx = np.gradient(N2.distance)

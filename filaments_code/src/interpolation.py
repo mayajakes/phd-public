@@ -54,15 +54,18 @@ def varToDens(dataArray, float_num = None, floatid = None, pdens = None, dens_in
     '''Interpolate any 2D xarray data variable from the float data to an even potential denisty grid'''
 
     if rs == True:
-        rs = calc.findRSperiod(float_num)
+        try:
+            ind = calc.findRSperiod(float_num)
+        except:
+            ind = slice(0, len(dataArray))
     else:
-        rs = slice(0, len(dataArray))
+        ind = slice(0, len(dataArray))
 
     try:
-        dist = dataArray.distance[rs]
+        dist = dataArray.distance[ind]
     except:
         print('calculating distance')
-        dist = calc.distFromStart(float_num)[rs]
+        dist = calc.distFromStart(float_num)[ind]
 
     if pdens is None:
         print('calculating density')
@@ -99,7 +102,7 @@ def varToDens(dataArray, float_num = None, floatid = None, pdens = None, dens_in
     else:
         on_dens = xr.DataArray(data = new_var, dims=["distance", "potential_density"], 
                                                 coords = dict(potential_density=("potential_density", dens_grid),
-                                                distance = ("distance", dist[rs].data)),)
+                                                distance = ("distance", dist[ind].data)),)
 
     return on_dens
 
