@@ -10,6 +10,7 @@ import src.interpolation as interp
 import src.stats as stats
 import src.velocities as vel
 import pandas as pd
+import datetime
 
 from matplotlib.ticker import MultipleLocator
 from astropy.convolution import convolve
@@ -31,6 +32,10 @@ def remove_bad_T_S(float_num, floatid):
         CT, SA = stats.delOddProfiles(float_num.CT, odd_profile), stats.delOddProfiles(float_num.SA, odd_profile)
     else:
         CT, SA = float_num.CT, float_num.SA
+
+    if CT.dims[0] == 'profile':
+        CT = CT.assign_coords({"profile": np.arange(0, len(CT))})
+        SA = SA.assign_coords({"profile": np.arange(0, len(CT))})
 
     return CT, SA
 
@@ -75,8 +80,9 @@ def save_figure(fig, my_path, name, dpi = 300, pad = 0.2):
 
 def save_to_netCDF(ds, dir, name):
     print('saving to netcdf...')
-    os.chmod(dir, stat.S_IWUSR | stat.S_IRUSR)
-    ds.to_netcdf(os.path.join(dir, name))                      
+    os.chmod(dir, stat.S_IRWXO)#stat.S_IWUSR | stat.S_IRUSR)
+    # os.chmod(os.path.join(dir, name), stat.S_IRWXO)
+    ds.to_netcdf(os.path.join(dir, name), mode='w')                      
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -146,7 +152,7 @@ def half_inertial_averaging(data, float_num, dim = 'profile'):
     '''Perform half-inertial pair averaging of EM-APEX float data. 
     Removes the effect of inertial oscillations if consecutive down or up profiles are approximately half and inertial period apart.'''
     
-    d_no_inert = xr.zeros_like(data[:-2])
+    d_no_inert = xr.zeros_like(data)
     
     if dim == 'time':
         if len(data.shape)>1:
@@ -191,7 +197,7 @@ def half_inertial_averaging(data, float_num, dim = 'profile'):
             
         else:
             if len(data.shape)>1:
-                d_no_inert[prof, :] = data[[prof,prof2], :].mean(dim = dim, skipna = True)
+                d_no_inert[prof, :] = data[[prof,prof2], :].mean(dim = dim,  skipna = True)
             else:
                 d_no_inert[prof] = data[[prof,prof2]].mean(dim = dim, skipna = True)
         
@@ -199,43 +205,56 @@ def half_inertial_averaging(data, float_num, dim = 'profile'):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def create_sub_inertial_ds(float_num, floatid, abs_vel, savedir):
+def create_sub_inertial_ds(float_num, floatid, abs_vels, rot_vels, ctd_time, savedir):
     ''' Half inertial pair averaging of all data variables into new dataset - this does not interpolate back onto original times. Use the imports.sub_inertial_ds function for this.'''
 
     print('Commencing half-inertial pair averaging...')
     rs = calc.findRSperiod(float_num)
     CT, SA = remove_bad_T_S(float_num, floatid)
 
-    u_abs = abs_vel.u_abs
-    v_abs = abs_vel.v_abs
-    u_abs, v_abs = vel.setAbsVelToNan(floatid, u_abs), vel.setAbsVelToNan(floatid, v_abs)
-    
-    CT_no_inert = half_inertial_averaging(CT[rs], float_num)
-    SA_no_inert = half_inertial_averaging(SA[rs], float_num)
+    u = vel.erroneous_rel_vels(abs_vels.u_abs, floatid)
+    v = vel.erroneous_rel_vels(abs_vels.v_abs, floatid)
+    u_abs = vel.setAbsVelToNan(floatid, u).interpolate_na('profile', method = 'linear', max_gap = 3)
+    v_abs = vel.setAbsVelToNan(floatid, v).interpolate_na('profile',  method = 'linear', max_gap = 3)
 
-    u_no_inert = half_inertial_averaging(u_abs, float_num, dim = 'distance')
-    v_no_inert = half_inertial_averaging(v_abs, float_num, dim = 'distance')
+    # rotated velocities
+    along_interp = rot_vels.u_rot.interpolate_na('profile',  method = 'linear', max_gap = 3)
+    cross_interp = rot_vels.v_rot.interpolate_na('profile', method = 'linear', max_gap = 3)
 
-    ctd_t_no_inert = half_inertial_averaging(float_num.ctd_t[rs], float_num, dim = 'time')
-    t_no_inert = half_inertial_averaging(float_num.time[rs], float_num, dim = 'time')
+    CT_no_inert = half_inertial_averaging(CT[rs].interpolate_na('profile', method = 'linear', max_gap = 3), float_num)
+    SA_no_inert = half_inertial_averaging(SA[rs].interpolate_na('profile', method = 'linear', max_gap = 3), float_num)
+
+    u_abs_no_inert = half_inertial_averaging(u_abs, float_num, dim = 'profile')
+    v_abs_no_inert = half_inertial_averaging(v_abs, float_num, dim = 'profile')
+
+    along_no_inert = half_inertial_averaging(along_interp, float_num, dim = 'profile')
+    cross_no_inert = half_inertial_averaging(cross_interp, float_num, dim = 'profile')
+
+    ctd_t_no_inert = half_inertial_averaging(ctd_time[rs], float_num, dim = 'time')
+    t_no_inert = half_inertial_averaging(float_num.time[rs], float_num, dim = 'time') 
+    #TO DO: Should we be setting the time of the up profile to where the float starts ascending (bottom of down profile?) #or the mid-point of each profile?
     
     lat_mid = half_inertial_averaging(float_num.latitude[rs], float_num, dim = 'latitude')
     lon_mid = half_inertial_averaging(float_num.longitude[rs], float_num, dim = 'longitude')
     
     ds_no_inertial = xr.Dataset(data_vars=dict(CT=(["time", "pressure"], CT_no_inert.data),
                                   SA = (["time", "pressure"], SA_no_inert.data),
-                                  u = (["time", "pressure"], u_no_inert.data, {'description':'absolute eastward'}),
-                                  v = (["time", "pressure"], v_no_inert.data, {'description':'absolute northward'}),
+                                  u_abs = (["time", "pressure"], u_abs_no_inert.data, {'description':'absolute eastward velocity'}),
+                                  v_abs = (["time", "pressure"], v_abs_no_inert.data, {'description':'absolute northward velocity'}),
+                                  u_rot = (["time", "pressure"], along_no_inert.data, {'description':'along-stream absolute velocity'}),
+                                  v_rot = (["time", "pressure"], cross_no_inert.data, {'description':'cross-stream absolute velocity'}),
                                   ctd_t = (["time", "pressure"], ctd_t_no_inert.data),),
                          coords = dict(pressure = ('pressure', float_num.pressure.data), 
                                        time = ('time', t_no_inert.data, {'description':'time_mid'}), 
                                        latitude = (["latitude"], lat_mid.data, {'description':'lat_mid'}),
                                        longitude = (["longitude"], lon_mid.data, {'description':'lon_mid'})), 
                         attrs=dict(description=f"{floatid}: Dataset of variables with inertial oscillations removed using half inertial pair averaging"),)
+    
+    ds_no_inertial.attrs = {'creation_date':str(datetime.datetime.now()), 'author':'Maya Jakes', 'email':'maya.jakes@utas.edu.au'}
 
     print('saving file')
     filename = 'ds_no_inertial'
-    name = filename + f'_{floatid}' + '.nc' 
+    name = filename + f'_{floatid}_extra_qc' + '.nc' 
     save_to_netCDF(ds_no_inertial, savedir, name)
 
     return ds_no_inertial

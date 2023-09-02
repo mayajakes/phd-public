@@ -41,7 +41,7 @@ def distFromStart(float_num):
     '''Cumulative distance from the first profile (km)'''
     lat = float_num.latitude
     lon = float_num.longitude
-
+    
     dist_between_profiles = np.concatenate((np.array([0]), gsw.distance(lon.values, lat.values)))
     dist_between_profiles_km = dist_between_profiles/1000
     dist_from_start = np.nancumsum(dist_between_profiles_km)
@@ -52,8 +52,16 @@ def distFromStart(float_num):
 
     return float_num.distance
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def cum_dist(lons, lats):
+    '''Cumulative distance from the first profile (km)'''
+    # use lat an lon positions corresponding to the start of each profile (e.g. surface position for down profiles and bottom of down profile for up profiles)
+
+    lats, lons = xr.DataArray(lats.data, dims = 'profile'), xr.DataArray(lons.data, dims = 'profile')
+    lats = lats.interpolate_na(dim ='profile')
+    lons = lons.interpolate_na(dim ='profile')
+
     dist_diff = np.concatenate((np.array([0]), gsw.distance(lons.values, lats.values)))
     dist_diff_km = dist_diff/1000
     dist_from_start = np.nancumsum(dist_diff_km)
@@ -479,8 +487,9 @@ def N2(CT, SA, lat, smooth = True, window = 75):
 
     [N2,p_midarray_n2] = gsw.Nsquared(SA, CT, p, axis = 1) # axis = dimension along which pressure increases
     
-    N2 = xr.DataArray(data = N2, dims = ["distance", "pressure"],coords = dict(pressure=(["pressure"], 
-        p_midarray_n2[0]),distance=(["distance"], CT.distance.data),))
+    N2 = xr.DataArray(N2.data, dims = CT.dims, coords = CT[CT.dims[0]].coords)
+    N2 = N2.assign_coords({"pressure": p_midarray_n2[0]})
+    # N2 = N2.interp(pressure = CT.pressure)
 
     if smooth == True:
         N2 = vel.smooth_prof_by_prof(N2, window = window)
@@ -1098,32 +1107,54 @@ def buoyancy(CT, SA, rho_ref = 'mean'):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def RiNumber(N2, b, lat, u = None, v = None, window = 55):
-    '''Inverse Richardson number (Ri^-1 = f^2 N^2 / b_grad^2), assuming thermal wind balance (Siegelman, 2020). '''
+def RiNumber(N2, b = None, lat = None, u = None, v = None, smooth_vels = False, window = 7):
+    '''Ri = N2 / (dudz**2 + dvdz**2). Relative strength of vertical stratification vs vertical velocity shear.'''
 
-    warnings.filterwarnings("ignore", category=RuntimeWarning)
-    
-    f = gsw.f(lat)
-    f = np.tile(f, (len(N2.pressure),1)).transpose()
-    dx = np.gradient(N2.distance)
-    dx = np.tile(dx, (len(N2.pressure),1)).transpose()
-
-    b_grad = np.gradient(b[:,0:-1])[0]/dx
-    b_grad = xr.DataArray(b_grad, dims = N2.dims, coords = N2.coords)
-    b_grad_smoothed = vel.smooth_prof_by_prof(b_grad, window = window)
-
-    Ri = (f**2 * N2) / b_grad_smoothed**2
+    if N2.dims[0] == 'distance':
+        dx = np.gradient(N2.distance)
+        dx = np.tile(dx, (len(N2.pressure),1)).transpose()
 
     if u is not None:
-        # Ri = N2/(u_z**2 + v_z**2)
-        dudz = u.interp(pressure = N2.pressure).differentiate('pressure')
-        dvdz = v.interp(pressure = N2.pressure).differentiate('pressure')
-        Ri = abs(N2 / (dudz**2 + dvdz**2))
-        mask = np.ma.masked_where(Ri == np.inf, Ri) 
+        # mask out nans in N2 
+        N2 = N2.interp(pressure = u.pressure)
+        mask = np.isnan(N2).data
+        
+        u.data[mask] = np.nan
+        v.data[mask] = np.nan
+
+        if smooth_vels == True:
+            u = vel.smooth_prof_by_prof(u, window = window, print_info = False)
+            v = vel.smooth_prof_by_prof(v, window = window, print_info = False)
+
+        dudz = u.differentiate('pressure')
+        dvdz = v.differentiate('pressure')
+
+        if len(N2) != len(dudz):
+            print('N2 to even x grid')
+            dx = np.gradient(u.distance)[0]
+            N2 = interp.even_dist_grid(N2, int(dx))
+            
+        shear = (dudz**2 + dvdz**2)
+        Ri = abs(N2 / shear)
+
+        mask = np.ma.masked_where(Ri == np.inf, Ri)
         Ri.data[mask.mask] = np.nan
-        Ri = Ri.rolling(pressure = window, center = True, min_periods = 3).mean(skipna = True)
-        # Ri = vel.smooth_prof_by_prof(Ri, window = window)
-    return Ri, b_grad_smoothed
+        # mask = np.ma.masked_where(Ri < 0, Ri)
+        # Ri.data[mask.mask] = 0
+
+        return Ri, shear
+
+    elif lat is not None:
+        ### Inverse Richardson number (Ri^-1 = f^2 N^2 / b_grad^2), assuming thermal wind balance (Siegelman, 2020).
+        f = gsw.f(lat)
+        f = np.tile(f, (len(N2.pressure),1)).transpose()
+
+        b_grad = np.gradient(b[:,0:-1])[0]/dx
+        b_grad = xr.DataArray(b_grad, dims = N2.dims, coords = N2.coords)
+        b_grad_smoothed = vel.smooth_prof_by_prof(b_grad, window = 7)
+
+        Ri = (f**2 * N2) / b_grad_smoothed**2
+        return Ri, b_grad_smoothed, N2
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 

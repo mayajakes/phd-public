@@ -190,3 +190,30 @@ def temporalError(float_num, dataArray, method = ('nearest', 'interp'), rs = Tru
         return nearest, lower, upper
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def percent_below_mL(data, mld, condition = '<= 1', zmax = None, dim = ('pressure', 'potential_density')):
+
+    condition_met = []
+
+    for i in range(0, len(data)):
+        mld_prof = mld[i]
+
+        if dim == 'pressure':
+            if zmax is None:
+                zmax = float(np.nanmax(data[i].pressure.data))
+            data_sel = data[i].sel(pressure = slice(mld_prof,zmax))
+
+        elif dim == 'potential_density':
+            if zmax is None:
+                zmax = float(np.nanmax(data[i].potential_density.data))
+            data_sel = data[i].sel(potential_density = slice(mld_prof,zmax))
+
+        string = 'data_sel' + condition
+        ind = np.where(eval(string))[0]
+        
+        if len(data_sel[~np.isnan(data_sel)]) > 0:
+            condition_met.append((len(ind)/len(data_sel))*100)
+        else:
+            condition_met.append(np.nan)
+
+    return np.asarray(condition_met)

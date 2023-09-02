@@ -227,17 +227,22 @@ def even_dist_grid(dataArray, dist_interval):
     
     if len(dataArray.dims) > 1:
         shp = (len(new_grid),len(dataArray[0]))
+        new_da = np.nan*np.ma.masked_all(shp)
+        for i in range(0, len(dataArray[0])):
+            new_da[:,i] = interpolate.interp1d(dataArray.distance.values, dataArray.values[:, i],
+                            bounds_error=False)(new_grid)
+            
+        new_da = xr.DataArray(data = new_da, dims=[dataArray.dims[0], dataArray.dims[1]], 
+                        coords = dict(dataArray[dataArray.dims[1]].coords,
+                            distance = ("distance", new_grid)),)
     else:
         shp = (len(new_grid),)
-    
-    new_da = np.nan*np.ma.masked_all(shp)
-    for i in range(0, len(dataArray[0])):
-        new_da[:,i] = interpolate.interp1d(dataArray.distance.values, dataArray.values[:, i],
+        new_da = np.nan*np.ma.masked_all(shp)
+        new_da = interpolate.interp1d(dataArray.distance.values, dataArray.values,
                         bounds_error=False)(new_grid)
-
-    new_da = xr.DataArray(data = new_da, dims=[dataArray.dims[0], dataArray.dims[1]], 
-                                coords = dict(dataArray[dataArray.dims[1]].coords,
-                                    distance = ("distance", new_grid)),)
+        
+        new_da = xr.DataArray(data = new_da, dims=['distance'], 
+                    coords = dict(distance = ("distance", new_grid)),)
 
     return new_da
 
@@ -373,7 +378,7 @@ def interp_nats(data, time_grid):
     nats = np.where(np.isnat(time_grid))[0]
     t = time_grid.astype(np.float64)
     t[nats] = np.nan
-    t_interp = xr.DataArray(t.data).interpolate_na(dim = 'dim_0')
+    t_interp = xr.DataArray(t.data).interpolate_na(dim = 'dim_0', fill_value="extrapolate")
     t_interp = t_interp.astype('datetime64[ns]')
 
     # # change time coords to interpolated grid
@@ -451,6 +456,39 @@ def even_time_grid_2d(data, old_time_grid, new_timestep, zdim = 'pressure'):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+# def grid_and_smooth(data_dict, floatids, dist_interval = 3, window = 3, min_window = 1, interp_nans = False, max_gap = 14, vert_smooth = False):
+#     '''Evenely grid in distance, then smooth using a rolling average on z levels. Concatenates multiple floats.'''
+    
+#     # horizontal gridding and horizontal smoothing
+#     d_even_dist = {}
+#     d_smooth = {}
+
+#     flt_dist_loc = []
+#     for floatid in floatids:
+#         if vert_smooth == True: 
+#             d = vel.smooth_prof_by_prof(data_dict[floatid], window = 75, print_info = False)
+#         else:
+#             d = data_dict[floatid]
+        
+#         if interp_nans == True:
+#             # drop duplicates in distancea and interpolate to fill nans
+#             d = d.drop_duplicates(dim = 'distance', keep='first')
+#             d = d.interpolate_na(dim = 'distance', max_gap = max_gap)
+
+#         d_even_dist[floatid] = even_dist_grid(d, dist_interval)
+#         # if interp_nans == True:
+#         #     d_even_dist[floatid] = d_even_dist[floatid].interpolate_na(dim = 'distance', max_gap = max_gap)
+
+#         d_smooth[floatid] = d_even_dist[floatid].rolling(distance = window, center = True, min_periods = min_window).mean()
+#         flt_dist_loc.append(d_even_dist[floatid].distance[-1].data)
+
+#     flt_dist_loc = np.cumsum(np.asarray(flt_dist_loc))[:-1]
+#     d_even_concat = ct.joinFloats(d_even_dist, 'distance', new_dim = True)
+#     d_smooth_concat = ct.joinFloats(d_smooth, 'distance', new_dim = True)
+    
+#     return d_even_concat, d_smooth_concat
+
+
 def grid_and_smooth(data_dict, floatids, dist_interval = 3, window = 3, min_window = 1, interp_nans = False, max_gap = 14, vert_smooth = False):
     '''Evenely grid in distance, then smooth using a rolling average on z levels. Concatenates multiple floats.'''
     
@@ -481,4 +519,4 @@ def grid_and_smooth(data_dict, floatids, dist_interval = 3, window = 3, min_wind
     d_even_concat = ct.joinFloats(d_even_dist, 'distance', new_dim = True)
     d_smooth_concat = ct.joinFloats(d_smooth, 'distance', new_dim = True)
     
-    return d_even_concat, d_smooth_concat
+    return d_even_concat, d_smooth_concat, d_smooth, d_even_dist

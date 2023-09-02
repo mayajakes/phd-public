@@ -333,7 +333,24 @@ def CTD_dt(float_num, prof):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def calcVelOffset(float_num, prof):
+def erroneous_rel_vels(velocity, floatid):
+    '''Remove additional velocity spikes / erroneous profiles'''
+    if floatid == 8489:
+        odd_profile = [40, 41, 84, 88, 90, 160, 161, 172, 173, 240, 241, 256]
+        new = stats.delOddProfiles(velocity, odd_profile)
+
+    if floatid == 8492:
+        odd_profile = [84, 88, 118]
+        new = stats.delOddProfiles(velocity, odd_profile)
+
+    if floatid == 8493:
+        odd_profile = [6, 7, 34, 35, 40, 41, 88, 89, 94, 120, 121, 220, 221, 250]
+        new = stats.delOddProfiles(velocity, odd_profile)
+
+    return new
+
+
+def calcVelOffset(float_num, floatid, u_rel, v_rel, prof):
     '''Calculates the velocity offset using the time difference between the float surfacing from the CTD and the GPS.
     Relative velocities through the water column are used to calculate the predicted position lat lon postiion when the float resurfaces.'''
     # time difference at the surface for both gps and ctd
@@ -341,19 +358,25 @@ def calcVelOffset(float_num, prof):
     if prof % 2 != 0:
         warnings.warn("Odd number profile entered. Profile before has been used to produce the correct offset", UserWarning)
         prof -= 1
+
+    u_rel = erroneous_rel_vels(u_rel, floatid)
+    v_rel = erroneous_rel_vels(v_rel, floatid)
+
+    lons = float_num.longitude
+    lats = float_num.latitude
     
     dt_gps = (float_num.time[prof+1] - float_num.time[prof]).values.astype('timedelta64[s]')
     dt_ctd = CTD_dt(float_num, prof)
     
     # fill in nan values at the surface and the bottom with nearest value
-    u1, v1 = fillnans(float_num.u_rel[prof]), fillnans(float_num.v_rel[prof])
-    u2, v2 = fillnans(float_num.u_rel[prof+1]), fillnans(float_num.v_rel[prof+1])
+    u1, v1 = fillnans(u_rel[prof]), fillnans(v_rel[prof])
+    u2, v2 = fillnans(u_rel[prof+1]), fillnans(v_rel[prof+1])
     dt1 = fillnans(np.diff(float_num.ctd_t[prof].values).astype('timedelta64[s]'))
     dt2 = fillnans(np.diff(float_num.ctd_t[prof+1].values).astype('timedelta64[s]'))
     
     # calculate dx and dy (in metres) at every depth from the CTD
-    dx1, dy1, dist1 = subsurface_dxdy(u1, v1, dt1, float_num, prof)
-    dx2, dy2, dist2 = subsurface_dxdy(u2, v2, dt2, float_num, prof+1)
+    dx1, dy1, dist1 = subsurface_dxdy(u1, v1, dt1)
+    dx2, dy2, dist2 = subsurface_dxdy(u2, v2, dt2)
 
     # if a profile contains no velocity data, set profile pair to nan
     if len(np.where(~np.isnan(dist1))[0]) < 1:
@@ -373,13 +396,12 @@ def calcVelOffset(float_num, prof):
     # print(meanv1, meanv)
     
     # calculate GPS displacement 
-    dx_gps, dy_gps = surface_dxdy(float_num.longitude[prof], float_num.latitude[prof], 
-                      float_num.longitude[prof+1], float_num.latitude[prof+1])
+    dx_gps, dy_gps = surface_dxdy(lons[prof], lats[prof], lons[prof+1], lats[prof+1])
     
-    if float_num.latitude[prof+1] <  float_num.latitude[prof]:
+    if lats[prof+1] <  lats[prof]:
         # print(f'profile {prof} to {prof+1}: dy is negative')
         dy_gps *= -1
-    if float_num.longitude[prof+1] <  float_num.longitude[prof]:
+    if lons[prof+1] <  lons[prof]:
         # print(f'profile {prof} to {prof+1}: dx is negative')
         dx_gps *= -1
     
@@ -455,7 +477,7 @@ def ctd_lat_lon(lat1, lon1, bearings, dist):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def subsurface_dxdy(u, v, dt, float_num, prof):
+def subsurface_dxdy(u, v, dt):
     '''Calculates dx and dy in metres using the current speed at each depth and the bearing (direction of current) '''
 
     speed = calc.speed(u,v)
@@ -515,12 +537,12 @@ def subsurface_dxdy(u, v, dt, float_num, prof):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def calcAbsoluetVelocity(float_num, prof):
+def calcAbsoluteVelocity(float_num, floatid, u_rel, v_rel, prof):
     '''Calculates absolute velocity = relative velocity + velocity offset.
     Returns absolute velocity for both down and up profiles.'''
-    u_offset, v_offset = calcVelOffset(float_num, prof)
-    u_rel1, v_rel1 = fillnans(float_num.u_rel[prof]), fillnans(float_num.v_rel[prof])
-    u_rel2, v_rel2 = fillnans(float_num.u_rel[prof+1]), fillnans(float_num.v_rel[prof+1])
+    u_offset, v_offset = calcVelOffset(float_num, floatid, u_rel, v_rel, prof)
+    u_rel1, v_rel1 = fillnans(u_rel[prof]), fillnans(v_rel[prof])
+    u_rel2, v_rel2 = fillnans(u_rel[prof+1]), fillnans(v_rel[prof+1])
 
     # absolute velocity
     u_abs1 = u_rel1 + u_offset
@@ -532,7 +554,7 @@ def calcAbsoluetVelocity(float_num, prof):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def plotSubsurfaceTrajectory(float_num, prof, abs_vels = True, print_offset = False):
+def plotSubsurfaceTrajectory(float_num, floatid, u_rel, v_rel, prof, abs_vels = True, print_offset = False):
     '''plot the subsurface trajectory between profiles (from the surface down to 1600 m and back up to the surface).
     Use either absolute velocities (relative velocities adjusted with velocity offset) - set abs_vels = True.
     Or use relative velocities (no offset) - set abs_vels = False. '''
@@ -541,12 +563,12 @@ def plotSubsurfaceTrajectory(float_num, prof, abs_vels = True, print_offset = Fa
         raise ValueError('Error: enter an even profile number starting from 0')
 
     # DOWN profile
-    u_rel1, v_rel1 = fillnans(float_num.u_rel[prof]), fillnans(float_num.v_rel[prof])
+    u_rel1, v_rel1 = fillnans(u_rel[prof]), fillnans(v_rel[prof])
     lon1_down = float_num.longitude[prof].values
     lat1_down = float_num.latitude[prof].values
 
     if abs_vels == True:
-        u_offset, v_offset = calcVelOffset(float_num, prof)
+        u_offset, v_offset = calcVelOffset(float_num, floatid, u_rel, v_rel, prof)
         print('u offset: {}, v offset: {}'.format(u_offset, v_offset))
     else:
         # set the offset to zero
@@ -558,11 +580,11 @@ def plotSubsurfaceTrajectory(float_num, prof, abs_vels = True, print_offset = Fa
 
     bearings1 = uvBearing(u1, v1)
     dt1 = fillnans(np.diff(float_num.ctd_t[prof].values).astype('timedelta64[s]'))
-    dx1, dy1, dist1 = subsurface_dxdy(u1, v1, dt1, float_num, prof)
+    dx1, dy1, dist1 = subsurface_dxdy(u1, v1, dt1)
     ctd_lats1, ctd_lons1 = ctd_lat_lon(lat1_down, lon1_down, bearings1, dist1)
 
     # UP profile
-    u_rel2, v_rel2 = fillnans(float_num.u_rel[prof+1]), fillnans(float_num.v_rel[prof+1])
+    u_rel2, v_rel2 = fillnans(u_rel[prof+1]), fillnans(v_rel[prof+1])
     u2 = u_rel2 + u_offset
     v2 = v_rel2 + v_offset
 
@@ -572,7 +594,7 @@ def plotSubsurfaceTrajectory(float_num, prof, abs_vels = True, print_offset = Fa
 
     bearings2 = uvBearing(u2, v2)
     dt2 = fillnans(np.diff(float_num.ctd_t[prof+1].values).astype('timedelta64[s]'))
-    dx2, dy2, dist2 = subsurface_dxdy(u2, v2, dt2, float_num, prof+1)
+    dx2, dy2, dist2 = subsurface_dxdy(u2, v2, dt2)
     ctd_lats2, ctd_lons2 = ctd_lat_lon(lat1_up, lon1_up, bearings2, np.abs(dist2))
 
     # PLOT on map 
@@ -619,53 +641,121 @@ def plotSubsurfaceTrajectory(float_num, prof, abs_vels = True, print_offset = Fa
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def createAbsVelDataset(float_num, floatid, by_dist = False, save = False):
+def location_at_bottom(surface_lat, surface_lon, ctd_time, prof, u_abs, v_abs):
+    '''Get the estimated lat lon location at the bottom of a down profile using the abosolute velocities.
+    Surface lat and lon positions of float from GPS.
+    ctd_time = time recorded by the ctd as the float is profiling under water.'''
+        
+    #even profile index = down profile
+    if prof % 2 != 0:
+        raise ValueError('Error: enter an even profile number starting from 0')
+    
+    nonans = ~np.isnan(u_abs[prof])
+    len_nonans = len(u_abs[prof].data[nonans])
+    nonats = ~np.isnat(ctd_time[prof])
+    len_nonat = len(ctd_time[prof].data[nonats])
+
+    if (len_nonans > 1) & (len_nonat > 1):
+        lon1_down = surface_lon[prof].values
+        lat1_down = surface_lat[prof].values
+
+        bearings1 = uvBearing(u_abs[prof], v_abs[prof])
+        dt1 = fillnans(np.diff(ctd_time[prof].values).astype('timedelta64[s]'))
+
+        dx1, dy1, dist1 = subsurface_dxdy(u_abs[prof], v_abs[prof], dt1)
+        ctd_lats1, ctd_lons1 = ctd_lat_lon(lat1_down, lon1_down, bearings1, dist1)
+
+        bottom_lat = ctd_lats1[-1]
+        bottom_lon = ctd_lons1[-1]
+    else:
+        bottom_lat, bottom_lon = np.nan, np.nan
+
+    return bottom_lat, bottom_lon
+
+
+
+def location_at_middepth(surface_lat, surface_lon, ctd_time, prof, u_abs, v_abs):
+    '''Get the estimated lat lon location at the middle of a profile using the abosolute velocities.
+    Surface lat and lon positions of float from GPS.
+    ctd_time = time recorded by the ctd as the float is profiling under water.'''
+
+    nonans = ~np.isnan(u_abs[prof])
+    len_nonans = len(u_abs[prof].data[nonans])
+    nonats = ~np.isnat(ctd_time[prof])
+    len_nonat = len(ctd_time[prof].data[nonats])
+
+    if (len_nonans > 1) & (len_nonat > 1):
+
+        lon_gps = surface_lon[prof].values
+        lat_gps = surface_lat[prof].values
+
+        vel_bearings = uvBearing(u_abs[prof], v_abs[prof])
+        dt = fillnans(np.diff(ctd_time[prof].values).astype('timedelta64[s]'))
+
+        dx, dy, dist1 = subsurface_dxdy(u_abs[prof], v_abs[prof], dt)
+        ctd_lats, ctd_lons = ctd_lat_lon(lat_gps, lon_gps, vel_bearings, dist1)
+
+        mid_ind = int(len(ctd_lats)/2)
+
+        mid_lat = ctd_lats[mid_ind]
+        mid_lon = ctd_lons[mid_ind]
+    else:
+        mid_lat, mid_lon = np.nan, np.nan
+
+    return mid_lat, mid_lon
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def createAbsVelDataset(float_num, floatid, u_rel, v_rel, by_dist = False, save_file = False, filename = 'abs_vel_%s_extra_qc') :
+    '''Create an xarray dataset with absolute velocity data and save it to a file'''
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
+
     rs = calc.findRSperiod(float_num)
     dist = calc.distFromStart(float_num)
+    # dist = calc.cum_dist(brng_lons, brng_lats) # TO DO: Use the distance calculated from brng lat and lons 
 
-    shp = float_num.T[rs].shape
+    shp = u_rel[rs].shape
     u_abs = np.ma.masked_all(shp)
     v_abs = np.ma.masked_all(shp)
 
     for prof in range(0, len(float_num.profile[rs]), 2):
         # print(prof)
-        u_abs1, v_abs1, u_abs2, v_abs2 = calcAbsoluetVelocity(float_num, prof)
+        u_abs1, v_abs1, u_abs2, v_abs2 = calcAbsoluteVelocity(float_num, floatid, u_rel, v_rel, prof)
         
         u_abs[prof,] = u_abs1
         u_abs[prof+1,] = u_abs2
         
         v_abs[prof,] = v_abs1
         v_abs[prof+1,] = v_abs2
-
-    abs_vel = xr.Dataset(data_vars=dict(u_abs =(["profile", "pressure"], u_abs.data),
-                                v_abs =(["profile", "pressure"], v_abs.data),),
-                coords=dict(
-                    profile =("profile", float_num.profile[rs].data),
-                    pressure = ("pressure", float_num.pressure.data),))
-
-    abs_vel['u_abs'].attrs = {'units':'m $s^{-1}$', 'long_name':'zonal absolute velocity'}
-    abs_vel['v_abs'].attrs = {'units':'m $s^{-1}$', 'long_name':'meridional absolute velocity'}
-    abs_vel['profile'].attrs = {'units':'profile', 'long_name':'profile'}
-    abs_vel['pressure'].attrs = {'units':'dbar', 'long_name':'sea water pressure'}
-    abs_vel.attrs = {'creation_date':str(datetime.datetime.now()), 'author':'Maya Jakes', 'email':'maya.jakes@utas.edu.au'}
-
-    # Save to NETCDF
-    if save == True:
-        datadir = os.path.join(os.sep, 'Users', 'mijakes', 'checkouts', 'phd', 'data', 'floats')
-        os.chmod(os.path.join(datadir, 'absolute_velocity', 'by_profile'), stat.S_IWUSR | stat.S_IRUSR)
-        abs_vel.to_netcdf(os.path.join(datadir, 'absolute_velocity', 'by_profile', 'abs_vel_%s.nc' %floatid))
-
+    
     if by_dist == True:
-        abs_vel_dist = xr.Dataset(data_vars=dict(u_abs =(["distance", "pressure"], abs_vel.u_abs.data),
-                                v_abs =(["distance", "pressure"], abs_vel.v_abs.data),),
+        folder = 'by_distance'
+        abs_vel = xr.Dataset(data_vars=dict(u_abs =(["distance", "pressure"], u_abs.data),
+                                v_abs =(["distance", "pressure"], v_abs.data),),
                 coords=dict(
                     distance =("distance", dist[rs].data),
                     pressure = ("pressure", float_num.pressure.data),))
-        
-        return abs_vel_dist
-    
     else:
-        return abs_vel
+        folder = 'by_profile'
+        abs_vel = xr.Dataset(data_vars=dict(u_abs =(["profile", "pressure"], u_abs.data),
+                                    v_abs =(["profile", "pressure"], v_abs.data),),
+                    coords=dict(
+                        profile =("profile", float_num.profile[rs].data),
+                        pressure = ("pressure", float_num.pressure.data),))
+
+    abs_vel['u_abs'].attrs = {'units':'m $s^{-1}$', 'long_name':'zonal absolute velocity'}
+    abs_vel['v_abs'].attrs = {'units':'m $s^{-1}$', 'long_name':'meridional absolute velocity'}
+    abs_vel['pressure'].attrs = {'units':'dbar', 'long_name':'sea water pressure'}
+    abs_vel.attrs = {'creation_date':str(datetime.datetime.now()), 'author':'Maya Jakes', 'email':'maya.jakes@utas.edu.au'}
+
+    if save_file == True:
+        # Save to NETCDF
+        datadir = os.path.join(os.sep, 'Users', 'mijakes', 'checkouts', 'phd', 'data', 'floats', 'absolute_velocity')
+        name = filename %floatid + '.nc' 
+        # name = 'abs_vel' + f'_{floatid}_' + '.nc' 
+        settings.save_to_netCDF(abs_vel, os.path.join(datadir, folder), name)
+
+    return abs_vel
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -797,45 +887,115 @@ def velShearSection(float_num, floatid, ref = 200, plot = True, remove_odd_profi
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def floatTrackBearing(float_num, smooth_gps = True, window = 9):
-    ''' Calculates the bearing (clockwise from True North) between each lat and lon position.
+# def floatTrackBearing(float_num, smooth_gps = True, window = 9):
+#     ''' Calculates the bearing (clockwise from True North) between each lat and lon position.
+#     ==============================================================================
+#     INPUTS:
+#     lons = 1D array of longitude values
+#     lats = 1D array of latitude values
+    
+#     OUTPUT:
+#     1D array of bearings (in degrees)
+#     '''
+#     if smooth_gps == True:
+#         lons = interp.gaussianFilter(float_num.longitude, window = window, interp_na = True)
+#         lats = interp.gaussianFilter(float_num.latitude, window = window, interp_na = True)
+#     else:
+#         lons = xr.DataArray(float_num.longitude.data)
+#         lons = lons.interpolate_na(dim = 'dim_0').values
+
+#         lats = xr.DataArray(float_num.latitude.data)
+#         lats = lats.interpolate_na(dim = 'dim_0').values
+
+#     bearing = []
+#     for i in range(0, len(lats)-1):
+#         lat1, lat2 = lats[i], lats[i+1]
+#         lon1, lon2 = lons[i], lons[i+1]
+
+#         geodesic = pyproj.Geod(ellps='WGS84')  # WGS84 is the reference coordinate system (Earth's centre of mass) used by GPS. 
+#         # Inverse computation to calculate the forward and back azimuths and distance from two lat and lon coordinates. 
+#         fwd_azimuth, back_azimuth, distance = geodesic.inv(lon1, lat1, lon2, lat2)
+
+#         # if the angle is negative (anticlockwise from N), add it to 360 to get the bearing clockwise from N.
+#         fwd_azimuth += 360
+#         fwd_azimuth = fwd_azimuth % 360
+
+#         if fwd_azimuth == 0:
+#             bearing.append(np.nan)
+#         else:
+#             bearing.append(fwd_azimuth)
+
+#     return np.asarray(bearing)
+
+
+
+def floatTrackBearing(floatid, lats, lons, ctd_time, u_abs, v_abs):
+    ''' Calculates the bearing (clockwise from True North) corresponding to the depth-integrated strean direction associated with each profile.
     ==============================================================================
     INPUTS:
     lons = 1D array of longitude values
     lats = 1D array of latitude values
+    abs_vels = absolute velocities
+    ctd_time = time recorded by ctd on float
     
     OUTPUT:
     1D array of bearings (in degrees)
     '''
-    if smooth_gps == True:
-        lons = interp.gaussianFilter(float_num.longitude, window = window, interp_na = True)
-        lats = interp.gaussianFilter(float_num.latitude, window = window, interp_na = True)
-    else:
-        lons = xr.DataArray(float_num.longitude.data)
-        lons = lons.interpolate_na(dim = 'dim_0').values
 
-        lats = xr.DataArray(float_num.latitude.data)
-        lats = lats.interpolate_na(dim = 'dim_0').values
+    u = setAbsVelToNan(floatid, u_abs)
+    v = setAbsVelToNan(floatid, v_abs)
 
-    bearing = []
-    for i in range(0, len(lats)-1):
-        lat1, lat2 = lats[i], lats[i+1]
-        lon1, lon2 = lons[i], lons[i+1]
+    u = erroneous_rel_vels(u, floatid)
+    v = erroneous_rel_vels(v, floatid)
 
-        geodesic = pyproj.Geod(ellps='WGS84')  # WGS84 is the reference coordinate system (Earth's centre of mass) used by GPS. 
-        # Inverse computation to calculate the forward and back azimuths and distance from two lat and lon coordinates. 
-        fwd_azimuth, back_azimuth, distance = geodesic.inv(lon1, lat1, lon2, lat2)
+    # latitude and longitude positions for where the bearing is taken from (surface of down profile and bottom of down profile)
+    brng_lats = []
+    brng_lons = []
 
-        # if the angle is negative (anticlockwise from N), add it to 360 to get the bearing clockwise from N.
+    bearing = np.zeros(lons.shape)*np.nan
+    for i in range(0, len(bearing)-1, 2):
+        # bearing from surface gps to bottom of down
+        lat1, lon1 = lats[i], lons[i]
+
+        brng_lats.append(lat1)
+        brng_lons.append(lon1)
+    
+        lat2, lon2 = location_at_bottom(lats, lons, ctd_time, i, u, v)
+
+        brng_lats.append(lat2)
+        brng_lons.append(lon2)
+
+        geodesic = pyproj.Geod(ellps='WGS84')
+        fwd_azimuth = geodesic.inv(lon1, lat1, lon2, lat2)[0]
+
         fwd_azimuth += 360
         fwd_azimuth = fwd_azimuth % 360
 
         if fwd_azimuth == 0:
-            bearing.append(np.nan)
+            bearing[i] = np.nan
         else:
-            bearing.append(fwd_azimuth)
+            bearing[i] = fwd_azimuth
 
-    return np.asarray(bearing)
+        # bearing from bottom of down to resurface
+        lat3, lon3 = lats[i+1], lons[i+1]
+
+        fwd_azimuth = geodesic.inv(lon2, lat2, lon3, lat3)[0]
+
+        fwd_azimuth += 360
+        fwd_azimuth = fwd_azimuth % 360
+
+        if fwd_azimuth == 0:
+            bearing[i+1] = np.nan
+        else:
+            bearing[i+1] = fwd_azimuth
+    
+    brng_lats = np.asarray(brng_lats)
+    brng_lons = np.asarray(brng_lons)
+
+    # TO DO: extract time at the bottom to be used for the time associated with the up profiles?
+
+    return bearing, brng_lats, brng_lons
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -872,8 +1032,9 @@ def rotate_to_ssh(adt, obs, lons, lats, obs_times, smooth_contours = False, wind
 
     for i in range(0, len(adt_interp)):
 
-        ssh_contours = np.arange(np.floor(np.nanmin(adt_interp_t.isel(time = i))), np.ceil(np.nanmax(adt_interp_t.isel(time = i))), 0.01)
-        CS = adt_interp_t.isel(time = i).plot.contour(levels = ssh_contours, alpha = 0.6)
+        # ssh_contours = np.arange(np.floor(np.nanmin(adt_interp_t[i])-0.2), np.ceil(np.nanmax(adt_interp_t[i])+0.2), 0.01)
+        ssh_contours = np.arange(-0.9, 0.4, 0.01)
+        CS = adt_interp_t[i].plot.contour(levels = ssh_contours, alpha = 0.6)
         
         # find nearest SSH contour to float profile location 
         contour_ind, contour_val = stats.find_nearest(ssh_contours, [float(adt_interp[i])])
@@ -886,7 +1047,7 @@ def rotate_to_ssh(adt, obs, lons, lats, obs_times, smooth_contours = False, wind
             x = savgol_filter(x, window, 3, axis=-1, mode='interp')
             y = savgol_filter(y, window, 3, axis=-1, mode='interp')
 
-        #calcualte the xoordinate with the shortest distance from float position
+        #calcualte the x-coordinate with the shortest distance from float position
         dist = []
         for k in range(0, len(x)):
             distance = geodesic.inv(x[k], y[k], lons[i], lats[i])[2]
@@ -944,35 +1105,86 @@ def rotate_to_ssh(adt, obs, lons, lats, obs_times, smooth_contours = False, wind
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def rotate_velocities(float_num, floatid, u, v, along_stream = None, smooth_vels = False, smooth_gps = True, window = 9):
+# def rotate_velocities(float_num, floatid, u, v, along_stream = None, smooth_vels = False, smooth_gps = True, window = 9):
+#     ''' Rotate velocities from eastward (u) and northward (v) to along-track (u_rot) and cross-track (v_rot), respectively.
+#         velocity_bearing = bearing of the velocities clockwise from True North
+#         stream_bearing = bearing from one profile to the next clockwise from True North
+
+#      ==============================================================================
+#      INPUT:
+#      u = eastward velocity component (could be 1D or 2D)
+#      v = northward velocity component (could be 1D or 2D)
+#      lons = 1D array of longitude values
+#      lats = 1D array of latitude values
+     
+#      OUTPUT:
+#      Rotated velocities with one less observation in x than the input velocities (no forward azimuth from the last lat lon position)
+#      u_rot = along-stream velocity
+#      v_rot = cross-stream velocity 
+#      ==============================================================================
+#     '''
+#     rs = calc.findRSperiod(float_num)
+    
+#     u, v = setAbsVelToNan(floatid, u), setAbsVelToNan(floatid, v)
+
+#     speed = calc.speed(u, v)
+#     velocity_bearing = uvBearing(u, v)
+
+#     if along_stream is None:
+#         along_stream = floatTrackBearing(float_num, smooth_gps = smooth_gps, window = window)[rs]
+#     # make 1D array into 2D in the same shape as velocity bearings
+#     stream_bearing = np.tile(along_stream,(len(float_num.pressure), 1)).transpose()
+
+#     # find the angle between the velocity bearing and the along stream direction
+#     theta = stream_bearing - velocity_bearing
+#     theta = (theta + 180) % 360 - 180
+
+#     # calculate u and v using this new angle (converting degrees to radians)
+#     u_rot = speed * np.cos(theta*np.pi/180)
+#     v_rot = speed * np.sin(theta*np.pi/180)
+
+#     if smooth_vels == True: 
+#         u_rot = smooth_prof_by_prof(u_rot, window = 75, print_info = False)
+#         v_rot = smooth_prof_by_prof(v_rot, window = 75, print_info = False)
+
+#     return u_rot, v_rot, theta
+
+
+
+def rotate_velocities(floatid, u_abs, v_abs, lats, lons, ctd_time, along_stream = None, smooth_vels = False):
     ''' Rotate velocities from eastward (u) and northward (v) to along-track (u_rot) and cross-track (v_rot), respectively.
         velocity_bearing = bearing of the velocities clockwise from True North
-        stream_bearing = bearing from one profile to the next clockwise from True North
+        stream_bearing = bearing from surface gps position to bottom of profile (downcast) and bottom of profile to resurface position (upcast).
 
      ==============================================================================
      INPUT:
-     u = eastward velocity component (could be 1D or 2D)
-     v = northward velocity component (could be 1D or 2D)
+     u_abs = eastward absolute velocity component (could be 1D or 2D)
+     v_abs = northward absolute velocity component (could be 1D or 2D)
      lons = 1D array of longitude values
      lats = 1D array of latitude values
+     ctd_time = subsurface time recorded by ctd on float
      
      OUTPUT:
-     Rotated velocities with one less observation in x than the input velocities (no forward azimuth from the last lat lon position)
      u_rot = along-stream velocity
      v_rot = cross-stream velocity 
      ==============================================================================
     '''
-    rs = calc.findRSperiod(float_num)
     
-    u, v = setAbsVelToNan(floatid, u), setAbsVelToNan(floatid, v)
+    u = setAbsVelToNan(floatid, u_abs)
+    v = setAbsVelToNan(floatid, v_abs)
+
+    u = erroneous_rel_vels(u, floatid)
+    v = erroneous_rel_vels(v, floatid)
 
     speed = calc.speed(u, v)
     velocity_bearing = uvBearing(u, v)
 
     if along_stream is None:
-        along_stream = floatTrackBearing(float_num, smooth_gps = smooth_gps, window = window)[rs]
+        along_stream, brng_lats, brng_lons = floatTrackBearing(floatid, lats, lons, ctd_time, u, v)
+
     # make 1D array into 2D in the same shape as velocity bearings
-    stream_bearing = np.tile(along_stream,(len(float_num.pressure), 1)).transpose()
+    stream_bearing = xr.DataArray(np.tile(along_stream,(len(u.pressure), 1)).transpose(), dims = velocity_bearing.dims, 
+                                                                    coords = velocity_bearing.coords)
 
     # find the angle between the velocity bearing and the along stream direction
     theta = stream_bearing - velocity_bearing
@@ -988,110 +1200,227 @@ def rotate_velocities(float_num, floatid, u, v, along_stream = None, smooth_vels
 
     return u_rot, v_rot, theta
 
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def plot_along_strm_dir(float_num, alt_cmems, prof1, prof2, window = 13, u = None, v = None):
+def createRotVelDataset(float_num, floatid, u_abs, v_abs, ctd_time, by_dist = False, save_file = False):
+    '''Create an xarray dataset with rotated velocity data and save it to a file'''
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+    rs = calc.findRSperiod(float_num)
+    # dist = calc.distFromStart(float_num)
+
+    lats, lons = float_num.latitude[rs], float_num.longitude[rs]
+
+    u = setAbsVelToNan(floatid, u_abs)
+    v = setAbsVelToNan(floatid, v_abs)
+
+    u = erroneous_rel_vels(u, floatid)
+    v = erroneous_rel_vels(v, floatid)
+
+    along_stream, brng_lats, brng_lons = floatTrackBearing(floatid, lats, lons, ctd_time, u, v)
+    dist = calc.cum_dist(brng_lons, brng_lats)
+
+    u_rot, v_rot, theta = rotate_velocities(floatid, u, v, lats, lons, ctd_time, along_stream = along_stream, smooth_vels = False)
+
+    if by_dist == True:
+        folder = 'by_distance'
+        rot_vel = xr.Dataset(data_vars=dict(u_rot =(["distance", "pressure"], u_rot.data),
+                                v_rot =(["distance", "pressure"], v_rot.data),
+                                theta =(["distance", "pressure"], theta.data),
+                                stream_brng = (["distance"], along_stream.data)),
+                coords=dict(
+                    brng_lats = ("latitude", brng_lats),
+                    brng_lons = ("longitude", brng_lons),
+                    distance =("distance", dist[rs].data),
+                    pressure = ("pressure", float_num.pressure.data),))
+    else:
+        folder = 'by_profile'
+        rot_vel = xr.Dataset(data_vars=dict(u_rot =(["profile", "pressure"], u_rot.data),
+                                    v_rot =(["profile", "pressure"], v_rot.data),
+                                    theta =(["profile", "pressure"], theta.data),
+                                    stream_brng = (["profile"], along_stream.data)),
+                    coords=dict(
+                        brng_lats = ("latitude", brng_lats),
+                        brng_lons = ("longitude", brng_lons),
+                        profile =("profile", float_num.profile[rs].data),
+                        pressure = ("pressure", float_num.pressure.data),))
+
+    rot_vel['u_rot'].attrs = {'units':'m $s^{-1}$', 'long_name':'along-track velocity'}
+    rot_vel['v_rot'].attrs = {'units':'m $s^{-1}$', 'long_name':'cross-track velocity'}
+    rot_vel['pressure'].attrs = {'units':'dbar', 'long_name':'sea water pressure'}
+    rot_vel.attrs = {'creation_date':str(datetime.datetime.now()), 'author':'Maya Jakes', 'email':'maya.jakes@utas.edu.au'}
+
+    if save_file == True:
+        # Save to NETCDF
+        datadir = os.path.join(os.sep, 'Users', 'mijakes', 'checkouts', 'phd', 'data', 'floats', 'rotated_velocity')
+        name = 'rot_vel' + f'_{floatid}' + '.nc' 
+        settings.save_to_netCDF(rot_vel, os.path.join(datadir, folder), name)
+
+    return rot_vel
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# def plot_along_strm_dir(float_num, alt_cmems, prof1, prof2, window = 13, u = None, v = None, scale = 1):
+#     '''Plot a quiver map showing the along-track bearing at each float profile.'''
+#     rs = calc.findRSperiod(float_num)
+    
+#     start = float_num.time.values[prof1]
+#     end = float_num.time.values[prof2]
+
+#     start_time, end_time = str(start.astype('M8[D]')), str(end.astype('M8[D]'))
+
+#     msl = alt_cmems.adt.sel(time = slice(start_time, end_time)).mean(dim = 'time').sel(
+#                                                         latitude = slice(-56, -51), longitude = slice(148.7, 153.2))
+
+#     levels = np.arange(-0.8,0.4,0.1)
+
+#     # UNSMOOTHED 
+#     along_stream = floatTrackBearing(float_num, smooth_gps = False)
+#     angle_rad = np.deg2rad(along_stream)
+#     y1 = 0.3 * np.cos(angle_rad) 
+#     x1 = 0.3 * np.sin(angle_rad) 
+
+#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize = (12,6))
+#     ax1.scatter(float_num.longitude[rs], float_num.latitude[rs], c= 'slategrey', alpha = 0.3)
+#     ax1.scatter(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2])
+#     ax1.quiver(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2], x1[prof1:prof2], y1[prof1:prof2], color = 'tab:red', scale = 3)
+
+#     CS = msl.plot.contour(ax = ax1, colors = 'dimgrey', alpha = 0.5, linewidths = 1, levels = levels, zorder = 3)
+#     plt.clabel(CS, inline=True, fontsize=11, fmt = '%1.1f')
+    
+#     # ax1.text(0.68, 0.04, f'prof {prof1}-{prof2}', transform = ax1.transAxes)
+
+#     # ax1.set_title('stream bearing (unsmoothed GPS)')
+#     ax1.set_title('unsmoothed GPS')
+#     ax1.set_ylabel(u'Latitude [\N{DEGREE SIGN}N]')
+#     ax1.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
+
+#     # SMOOTHED 
+#     lons = interp.gaussianFilter(float_num.longitude, window = window, interp_na = True)
+#     lats = interp.gaussianFilter(float_num.latitude, window = window, interp_na = True)
+
+#     along_stream = floatTrackBearing(float_num, smooth_gps = True, window = window)
+#     angle_rad = np.deg2rad(along_stream)
+#     y2 = 0.3 * np.cos(angle_rad) 
+#     x2 = 0.3 * np.sin(angle_rad) 
+
+#     ax2.scatter(float_num.longitude[rs], float_num.latitude[rs], c= 'slategrey', alpha = 0.3)
+#     ax2.scatter(lons[prof1:prof2], lats[prof1:prof2])
+#     ax2.quiver(lons[prof1:prof2], lats[prof1:prof2], x2[prof1:prof2], y2[prof1:prof2], color = 'tab:red', scale =3)
+    
+
+#     CS = msl.plot.contour(ax = ax2, colors = 'dimgrey', alpha = 0.5, linewidths = 1, levels = levels, zorder = 3)
+#     plt.clabel(CS, inline=True, fontsize=11, fmt = '%1.1f')
+    
+#     # ax2.text(0.68, 0.04, f'prof {prof1}-{prof2}', transform = ax2.transAxes)
+    
+#     ax2.set_ylabel(' ')
+#     # plt.title('stream bearing (smoothed GPS)')
+#     ax2.set_title('smoothed GPS')
+#     ax2.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
+    
+#     if u is not None:
+#         xmin, xmax = np.nanmin(lons[prof1:prof2]), np.nanmax(lons[prof1:prof2])
+#         ymin, ymax = np.nanmin(lats[prof1:prof2]), np.nanmax(lats[prof1:prof2])
+
+#         # UNSMOOTHED
+#         fig2, (ax1, ax2) = plt.subplots(1, 2, figsize = (11,4.5))
+#         ax1.scatter(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2], c = 'slategrey')
+#         # surface velocity 
+#         ax1.quiver(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2], u[prof1:prof2].sel(pressure = 200), 
+#                 v[prof1:prof2].sel(pressure = 200),  color = 'cyan', scale = scale+1)
+
+#         # float track bearing
+#         ax1.quiver(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2], x1[prof1:prof2], y1[prof1:prof2], color = 'tab:red', scale = scale)
+
+#         # ax1.legend(['gps', 'velocity at 200 dbar', 'stream bearing'], fontsize = 12, loc = 'lower right')
+#         # ax1.set_title(f'prof {prof1}-{prof2}')
+#         ax1.text(0.05, 0.9, f'prof {prof1}-{prof2}', transform = ax1.transAxes)
+#         ax1.set_xlim(xmin - 0.3, xmax + 0.4)
+#         ax1.set_ylim(ymin - 0.3, ymax + 0.5)
+#         ax1.set_ylabel(u'Latitude [\N{DEGREE SIGN}N]')
+#         ax1.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
+
+#         # SMOOTHED
+#         ax2.scatter(lons[prof1:prof2], lats[prof1:prof2], c = 'slategrey')
+#         # surface velocity 
+#         ax2.quiver(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2], u[prof1:prof2].sel(pressure = 200), 
+#                 v[prof1:prof2].sel(pressure = 200),  color = 'cyan', scale = scale+1)
+
+#         # float track bearing
+#         ax2.quiver(lons[prof1:prof2], lats[prof1:prof2], x2[prof1:prof2], y2[prof1:prof2], color = 'tab:red', scale = scale)
+
+#         plt.legend(['gps', 'velocity at 200 dbar', 'stream bearing'], fontsize = 13, bbox_to_anchor=(0.65,  1.15), ncol = 3)
+#         # ax2.set_title(f'prof {prof1}-{prof2}')
+#         ax2.text(0.05, 0.9, f'prof {prof1}-{prof2}', transform = ax2.transAxes)
+#         ax2.set_xlim(xmin - 0.3, xmax + 0.4)
+#         ax2.set_ylim(ymin - 0.3, ymax + 0.5)
+#         ax2.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
+
+#         # plt.tight_layout(w_pad = 1.2)
+
+#         return fig, fig2
+#     else:
+#         return fig
+
+
+def plot_along_strm_dir(float_num, along_stream, brng_lats, brng_lons, alt_cmems, prof1, prof2, u = None, v = None, scale = 1):
     '''Plot a quiver map showing the along-track bearing at each float profile.'''
     rs = calc.findRSperiod(float_num)
     
     start = float_num.time.values[prof1]
     end = float_num.time.values[prof2]
-
     start_time, end_time = str(start.astype('M8[D]')), str(end.astype('M8[D]'))
 
-    msl = alt_cmems.adt.sel(time = slice(start_time, end_time)).mean(dim = 'time').sel(
-                                                        latitude = slice(-56, -51), longitude = slice(148.7, 153.2))
-
+    msl = alt_cmems.adt.sel(time = slice(start_time, end_time)).mean(dim = 'time').sel(latitude = slice(-56, -51), longitude = slice(148.7, 153.2))
     levels = np.arange(-0.8,0.4,0.1)
 
-    # UNSMOOTHED 
-    along_stream = floatTrackBearing(float_num, smooth_gps = False)
+    # along_stream, brng_lats, brng_lons = floatTrackBearing(floatid, float_num.latitude[rs], 
+    #                                                    float_num.longitude[rs], ctd_time[rs], u_abs, v_abs)
     angle_rad = np.deg2rad(along_stream)
     y1 = 0.3 * np.cos(angle_rad) 
-    x1 = 0.3 * np.sin(angle_rad) 
+    x1 = 0.3 * np.sin(angle_rad)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize = (12,6))
-    ax1.scatter(float_num.longitude[rs], float_num.latitude[rs], c= 'slategrey', alpha = 0.3)
-    ax1.scatter(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2])
-    ax1.quiver(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2], x1[prof1:prof2], y1[prof1:prof2], color = 'tab:red', scale = 3)
+    fig, ax= plt.subplots(figsize = (5.5,6))
+    ax.scatter(float_num.longitude[rs], float_num.latitude[rs], c= 'slategrey', alpha = 0.3)
+    ax.scatter(brng_lons[prof1:prof2], brng_lats[prof1:prof2])
+    ax.quiver(brng_lons[prof1:prof2], brng_lats[prof1:prof2], x1[prof1:prof2], y1[prof1:prof2], color = 'tab:red', scale = 2.5)
 
-    CS = msl.plot.contour(ax = ax1, colors = 'dimgrey', alpha = 0.5, linewidths = 1, levels = levels, zorder = 3)
+    CS = msl.plot.contour(colors = 'dimgrey', alpha = 0.5, linewidths = 1, levels = levels, zorder = 3)
     plt.clabel(CS, inline=True, fontsize=11, fmt = '%1.1f')
     
-    # ax1.text(0.68, 0.04, f'prof {prof1}-{prof2}', transform = ax1.transAxes)
+    # ax.text(0.68, 0.04, f'prof {prof1}-{prof2}', transform = ax.transAxes)
+    ax.set_title(f'prof {prof1}-{prof2}', fontsize = 15)
+    ax.set_ylabel(u'Latitude [\N{DEGREE SIGN}N]')
+    ax.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
 
-    # ax1.set_title('stream bearing (unsmoothed GPS)')
-    ax1.set_title('unsmoothed GPS')
-    ax1.set_ylabel(u'Latitude [\N{DEGREE SIGN}N]')
-    ax1.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
-
-    # SMOOTHED 
-    lons = interp.gaussianFilter(float_num.longitude, window = window, interp_na = True)
-    lats = interp.gaussianFilter(float_num.latitude, window = window, interp_na = True)
-
-    along_stream = floatTrackBearing(float_num, smooth_gps = True, window = window)
-    angle_rad = np.deg2rad(along_stream)
-    y2 = 0.3 * np.cos(angle_rad) 
-    x2 = 0.3 * np.sin(angle_rad) 
-
-    ax2.scatter(float_num.longitude[rs], float_num.latitude[rs], c= 'slategrey', alpha = 0.3)
-    ax2.scatter(lons[prof1:prof2], lats[prof1:prof2])
-    ax2.quiver(lons[prof1:prof2], lats[prof1:prof2], x2[prof1:prof2], y2[prof1:prof2], color = 'tab:red', scale =3)
-    
-
-    CS = msl.plot.contour(ax = ax2, colors = 'dimgrey', alpha = 0.5, linewidths = 1, levels = levels, zorder = 3)
-    plt.clabel(CS, inline=True, fontsize=11, fmt = '%1.1f')
-    
-    # ax2.text(0.68, 0.04, f'prof {prof1}-{prof2}', transform = ax2.transAxes)
-    
-    ax2.set_ylabel(' ')
-    # plt.title('stream bearing (smoothed GPS)')
-    ax2.set_title('smoothed GPS')
-    ax2.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
-    
     if u is not None:
-        xmin, xmax = np.nanmin(lons[prof1:prof2]), np.nanmax(lons[prof1:prof2])
-        ymin, ymax = np.nanmin(lats[prof1:prof2]), np.nanmax(lats[prof1:prof2])
+        xmin, xmax = np.nanmin(brng_lons[prof1:prof2]), np.nanmax(brng_lons[prof1:prof2])
+        ymin, ymax = np.nanmin(brng_lats[prof1:prof2]), np.nanmax(brng_lats[prof1:prof2])
 
         # UNSMOOTHED
-        fig2, (ax1, ax2) = plt.subplots(1, 2, figsize = (11,4.5))
-        ax1.scatter(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2], c = 'slategrey')
+        fig2, ax = plt.subplots(figsize = (5,4))
+        ax.scatter(brng_lons[prof1:prof2], brng_lats[prof1:prof2],c = 'slategrey')
         # surface velocity 
-        ax1.quiver(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2], u[prof1:prof2].sel(pressure = 200), 
-                v[prof1:prof2].sel(pressure = 200),  color = 'cyan', scale = 1.5)
+        ax.quiver(brng_lons[prof1:prof2], brng_lats[prof1:prof2], u[prof1:prof2].sel(pressure = 200), 
+                v[prof1:prof2].sel(pressure = 200),  color = 'cyan', scale = scale+1)
 
         # float track bearing
-        ax1.quiver(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2], x1[prof1:prof2], y1[prof1:prof2], color = 'tab:red', scale = 1)
+        ax.quiver(brng_lons[prof1:prof2], brng_lats[prof1:prof2], x1[prof1:prof2], y1[prof1:prof2], color = 'tab:red', scale = scale-0.5)
 
-        # ax1.legend(['gps', 'velocity at 200 dbar', 'stream bearing'], fontsize = 12, loc = 'lower right')
-        # ax1.set_title(f'prof {prof1}-{prof2}')
-        ax1.text(0.05, 0.9, f'prof {prof1}-{prof2}', transform = ax1.transAxes)
-        ax1.set_xlim(xmin - 0.2, xmax + 0.2)
-        ax1.set_ylim(ymin - 0.3, ymax + 0.3)
-        ax1.set_ylabel(u'Latitude [\N{DEGREE SIGN}N]')
-        ax1.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
-
-        # SMOOTHED
-        ax2.scatter(lons[prof1:prof2], lats[prof1:prof2], c = 'slategrey')
-        # surface velocity 
-        ax2.quiver(float_num.longitude[prof1:prof2], float_num.latitude[prof1:prof2], u[prof1:prof2].sel(pressure = 200), 
-                v[prof1:prof2].sel(pressure = 200),  color = 'cyan', scale = 1.5)
-
-        # float track bearing
-        ax2.quiver(lons[prof1:prof2], lats[prof1:prof2], x2[prof1:prof2], y2[prof1:prof2], color = 'tab:red', scale = 1)
-
-        plt.legend(['gps', 'velocity at 200 dbar', 'stream bearing'], fontsize = 13, bbox_to_anchor=(0.65,  1.15), ncol = 3)
-        # ax2.set_title(f'prof {prof1}-{prof2}')
-        ax2.text(0.05, 0.9, f'prof {prof1}-{prof2}', transform = ax2.transAxes)
-        ax2.set_xlim(xmin - 0.2, xmax + 0.2)
-        ax2.set_ylim(ymin - 0.3, ymax + 0.3)
-        ax2.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
-
-        # plt.tight_layout(w_pad = 1.2)
+        ax.legend(['gps', 'velocity at 200 dbar', 'stream bearing'], fontsize = 12, loc = 'lower left')
+        ax.text(0.05, 0.9, f'prof {prof1}-{prof2}', transform = ax.transAxes)
+        ax.set_xlim(xmin - 0.3, xmax + 0.4)
+        ax.set_ylim(ymin - 0.4, ymax + 0.4)
+        ax.set_ylabel(u'Latitude [\N{DEGREE SIGN}N]')
+        ax.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
 
         return fig, fig2
     else:
         return fig
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1179,9 +1508,12 @@ def vert_vel_deriv(float_num, floatid, u, v, smooth_vels = True, save_file = Fal
     t0 = float_num.time[0]
     lat = float_num.latitude[1]
     z = gsw.z_from_p(float_num.pressure, lat)
-    dist = calc.distFromStart(float_num)
 
-    CT, SA = settings.remove_bad_T_S(float_num, floatid)
+    # dist = calc.distFromStart(float_num)
+    dist = float_num.distance
+
+    # CT, SA = settings.remove_bad_T_S(float_num, floatid)
+    CT, SA = float_num.CT, float_num.SA
     
     drho_dt, drho_dz, dv_dz, du_dz = (np.zeros(u.shape)*np.nan for _ in range(4))
     du_dx, dv_dx, d2u_dzdx, d2v_dzdx = (np.zeros(v.shape)*np.nan for _ in range(4))
@@ -1260,14 +1592,19 @@ def vert_vel_deriv(float_num, floatid, u, v, smooth_vels = True, save_file = Fal
 
 def calc_w(float_num, floatid, u, v, deriv_ds, smooth_vels = True, smooth_gps = True, by_dist = True, save_file = False, filename = None):
     '''Calculates each term in the vertical velocity equation from Phillips & Bindoff (2014).
-    Takes three profiles at a time and calculates derivatives centred on the middle profile.'''
+    Takes three profiles at a time and calculates derivatives centred on the middle profile (centered difference scheme)
+    u and v are rotated velocities, with inertial oscillations removed through 1/2 inertial pair averaging.'''
     warnings.filterwarnings("ignore", category=RuntimeWarning)
 
     g = 9.81
     t0 = float_num.time[0]
-    dist = calc.distFromStart(float_num)
     # rs = calc.findRSperiod(float_num)
-    CT, SA = settings.remove_bad_T_S(float_num, floatid)
+
+    # dist = calc.distFromStart(float_num)
+    dist = float_num.distance
+
+    # CT, SA = settings.remove_bad_T_S(float_num, floatid)
+    CT, SA = float_num.CT, float_num.SA
 
     # smooth gps positions in the same way as is used in rotate_velocities
     K = calc.floatCurvature(float_num, transform = True, remove_outliers = True, smooth_gps = smooth_gps)
@@ -1301,17 +1638,16 @@ def calc_w(float_num, floatid, u, v, deriv_ds, smooth_vels = True, smooth_gps = 
         drho_dz[np.where(drho_dz == 0)] = np.nan
         
         w_tchng_a[prof] = -deriv_ds.drho_dt[prof] / drho_dz
-        # check: should c be in wtchng_b?
         w_tchng_b[prof] = (-(c * f/g) * rho_bar * deriv_ds.dv_dz[prof]) / drho_dz
         w_rot[prof] = ((f * rho[1] / g) * (u_new[1] * deriv_ds.dv_dz[prof] - v_new[1] * deriv_ds.du_dz[prof])) / drho_dz
         w_curv[prof] = ((K[prof] * c * rho[1] / g) * (u_new[1] * deriv_ds.dv_dz[prof] - v_new[1] * deriv_ds.du_dz[prof])) / drho_dz
         w_accel[prof] = ((-rho[1] * c / g) * (u_new[1] * deriv_ds.d2u_dzdx[prof] + v_new[1] * deriv_ds.d2v_dzdx[prof])) / drho_dz   
 
-        w_tchng_a = setAbsVelToNan(floatid, w_tchng_a)
-        w_tchng_b = setAbsVelToNan(floatid, w_tchng_b)
-        w_rot = setAbsVelToNan(floatid, w_rot)
-        w_curv = setAbsVelToNan(floatid, w_curv)
-        w_accel = setAbsVelToNan(floatid, w_accel)
+        # w_tchng_a = setAbsVelToNan(floatid, w_tchng_a)
+        # w_tchng_b = setAbsVelToNan(floatid, w_tchng_b)
+        # w_rot = setAbsVelToNan(floatid, w_rot)
+        # w_curv = setAbsVelToNan(floatid, w_curv)
+        # w_accel = setAbsVelToNan(floatid, w_accel)
 
         if by_dist == True:
             folder = 'by_distance'
@@ -1342,7 +1678,7 @@ def calc_w(float_num, floatid, u, v, deriv_ds, smooth_vels = True, smooth_gps = 
     # turn zeros back to nan
     mask = np.ma.masked_where(w_total == 0, w_total) 
     w_total.data[mask.mask] = np.nan
-    w_total = setAbsVelToNan(floatid, w_total)
+    # w_total = setAbsVelToNan(floatid, w_total)
     vert_vel['w_total'] = w_total
 
     if save_file == True: 
