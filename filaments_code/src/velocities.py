@@ -887,45 +887,45 @@ def velShearSection(float_num, floatid, ref = 200, plot = True, remove_odd_profi
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# def floatTrackBearing(float_num, smooth_gps = True, window = 9):
-#     ''' Calculates the bearing (clockwise from True North) between each lat and lon position.
-#     ==============================================================================
-#     INPUTS:
-#     lons = 1D array of longitude values
-#     lats = 1D array of latitude values
+def floatTrackBearing_old_method(float_num, smooth_gps = True, window = 9):
+    ''' Calculates the bearing (clockwise from True North) between each lat and lon position.
+    ==============================================================================
+    INPUTS:
+    lons = 1D array of longitude values
+    lats = 1D array of latitude values
     
-#     OUTPUT:
-#     1D array of bearings (in degrees)
-#     '''
-#     if smooth_gps == True:
-#         lons = interp.gaussianFilter(float_num.longitude, window = window, interp_na = True)
-#         lats = interp.gaussianFilter(float_num.latitude, window = window, interp_na = True)
-#     else:
-#         lons = xr.DataArray(float_num.longitude.data)
-#         lons = lons.interpolate_na(dim = 'dim_0').values
+    OUTPUT:
+    1D array of bearings (in degrees)
+    '''
+    if smooth_gps == True:
+        lons = interp.gaussianFilter(float_num.longitude, window = window, interp_na = True)
+        lats = interp.gaussianFilter(float_num.latitude, window = window, interp_na = True)
+    else:
+        lons = xr.DataArray(float_num.longitude.data)
+        lons = lons.interpolate_na(dim = 'dim_0').values
 
-#         lats = xr.DataArray(float_num.latitude.data)
-#         lats = lats.interpolate_na(dim = 'dim_0').values
+        lats = xr.DataArray(float_num.latitude.data)
+        lats = lats.interpolate_na(dim = 'dim_0').values
 
-#     bearing = []
-#     for i in range(0, len(lats)-1):
-#         lat1, lat2 = lats[i], lats[i+1]
-#         lon1, lon2 = lons[i], lons[i+1]
+    bearing = []
+    for i in range(0, len(lats)-1):
+        lat1, lat2 = lats[i], lats[i+1]
+        lon1, lon2 = lons[i], lons[i+1]
 
-#         geodesic = pyproj.Geod(ellps='WGS84')  # WGS84 is the reference coordinate system (Earth's centre of mass) used by GPS. 
-#         # Inverse computation to calculate the forward and back azimuths and distance from two lat and lon coordinates. 
-#         fwd_azimuth, back_azimuth, distance = geodesic.inv(lon1, lat1, lon2, lat2)
+        geodesic = pyproj.Geod(ellps='WGS84')  # WGS84 is the reference coordinate system (Earth's centre of mass) used by GPS. 
+        # Inverse computation to calculate the forward and back azimuths and distance from two lat and lon coordinates. 
+        fwd_azimuth, back_azimuth, distance = geodesic.inv(lon1, lat1, lon2, lat2)
 
-#         # if the angle is negative (anticlockwise from N), add it to 360 to get the bearing clockwise from N.
-#         fwd_azimuth += 360
-#         fwd_azimuth = fwd_azimuth % 360
+        # if the angle is negative (anticlockwise from N), add it to 360 to get the bearing clockwise from N.
+        fwd_azimuth += 360
+        fwd_azimuth = fwd_azimuth % 360
 
-#         if fwd_azimuth == 0:
-#             bearing.append(np.nan)
-#         else:
-#             bearing.append(fwd_azimuth)
+        if fwd_azimuth == 0:
+            bearing.append(np.nan)
+        else:
+            bearing.append(fwd_azimuth)
 
-#     return np.asarray(bearing)
+    return np.asarray(bearing)
 
 
 
@@ -1105,49 +1105,49 @@ def rotate_to_ssh(adt, obs, lons, lats, obs_times, smooth_contours = False, wind
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# def rotate_velocities(float_num, floatid, u, v, along_stream = None, smooth_vels = False, smooth_gps = True, window = 9):
-#     ''' Rotate velocities from eastward (u) and northward (v) to along-track (u_rot) and cross-track (v_rot), respectively.
-#         velocity_bearing = bearing of the velocities clockwise from True North
-#         stream_bearing = bearing from one profile to the next clockwise from True North
+def rotate_velocities_old_method(float_num, floatid, u, v, along_stream = None, smooth_vels = False, smooth_gps = True, window = 9):
+    ''' Rotate velocities from eastward (u) and northward (v) to along-track (u_rot) and cross-track (v_rot), respectively.
+        velocity_bearing = bearing of the velocities clockwise from True North
+        stream_bearing = bearing from one profile to the next clockwise from True North
 
-#      ==============================================================================
-#      INPUT:
-#      u = eastward velocity component (could be 1D or 2D)
-#      v = northward velocity component (could be 1D or 2D)
-#      lons = 1D array of longitude values
-#      lats = 1D array of latitude values
+     ==============================================================================
+     INPUT:
+     u = eastward velocity component (could be 1D or 2D)
+     v = northward velocity component (could be 1D or 2D)
+     lons = 1D array of longitude values
+     lats = 1D array of latitude values
      
-#      OUTPUT:
-#      Rotated velocities with one less observation in x than the input velocities (no forward azimuth from the last lat lon position)
-#      u_rot = along-stream velocity
-#      v_rot = cross-stream velocity 
-#      ==============================================================================
-#     '''
-#     rs = calc.findRSperiod(float_num)
+     OUTPUT:
+     Rotated velocities with one less observation in x than the input velocities (no forward azimuth from the last lat lon position)
+     u_rot = along-stream velocity
+     v_rot = cross-stream velocity 
+     ==============================================================================
+    '''
+    rs = calc.findRSperiod(float_num)
     
-#     u, v = setAbsVelToNan(floatid, u), setAbsVelToNan(floatid, v)
+    # u, v = setAbsVelToNan(floatid, u), setAbsVelToNan(floatid, v)
 
-#     speed = calc.speed(u, v)
-#     velocity_bearing = uvBearing(u, v)
+    speed = calc.speed(u, v)
+    velocity_bearing = uvBearing(u, v)
 
-#     if along_stream is None:
-#         along_stream = floatTrackBearing(float_num, smooth_gps = smooth_gps, window = window)[rs]
-#     # make 1D array into 2D in the same shape as velocity bearings
-#     stream_bearing = np.tile(along_stream,(len(float_num.pressure), 1)).transpose()
+    if along_stream is None:
+        along_stream = floatTrackBearing_old_method(float_num, smooth_gps = smooth_gps, window = window)[rs]
+    # make 1D array into 2D in the same shape as velocity bearings
+    stream_bearing = np.tile(along_stream,(len(float_num.pressure), 1)).transpose()
 
-#     # find the angle between the velocity bearing and the along stream direction
-#     theta = stream_bearing - velocity_bearing
-#     theta = (theta + 180) % 360 - 180
+    # find the angle between the velocity bearing and the along stream direction
+    theta = stream_bearing - velocity_bearing
+    theta = (theta + 180) % 360 - 180
 
-#     # calculate u and v using this new angle (converting degrees to radians)
-#     u_rot = speed * np.cos(theta*np.pi/180)
-#     v_rot = speed * np.sin(theta*np.pi/180)
+    # calculate u and v using this new angle (converting degrees to radians)
+    u_rot = speed * np.cos(theta*np.pi/180)
+    v_rot = speed * np.sin(theta*np.pi/180)
 
-#     if smooth_vels == True: 
-#         u_rot = smooth_prof_by_prof(u_rot, window = 75, print_info = False)
-#         v_rot = smooth_prof_by_prof(v_rot, window = 75, print_info = False)
+    if smooth_vels == True: 
+        u_rot = smooth_prof_by_prof(u_rot, window = 75, print_info = False)
+        v_rot = smooth_prof_by_prof(v_rot, window = 75, print_info = False)
 
-#     return u_rot, v_rot, theta
+    return u_rot, v_rot, theta
 
 
 

@@ -208,9 +208,14 @@ def percent_below_mL(data, mld, condition = '<= 1', zmax = None, dim = ('pressur
                 zmax = float(np.nanmax(data[i].potential_density.data))
             data_sel = data[i].sel(potential_density = slice(mld_prof,zmax))
 
-        string = 'data_sel' + condition
-        ind = np.where(eval(string))[0]
-        
+        if type(condition) == list:
+            string1 = 'data_sel' + condition[0]
+            string2 = 'data_sel' + condition[1]
+            ind = np.where(eval(string1) & eval(string2))[0]
+        else:
+            string = 'data_sel' + condition
+            ind = np.where(eval(string))[0]
+            
         if len(data_sel[~np.isnan(data_sel)]) > 0:
             condition_met.append((len(ind)/len(data_sel))*100)
         else:
