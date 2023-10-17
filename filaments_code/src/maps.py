@@ -203,16 +203,17 @@ def floatDomain(floatids, bathymetry, altimetry, extent = [147,173,-60.5,-49.5],
     new.depth.sel(lon = longitude, lat = latitude).plot(alpha = 0.5, cmap=cmocean.cm.deep, vmin=500, vmax=6000, cbar_kwargs=dict(label='depth (m)'))
 
     # Add SSH contours averaged during the first float deployments (8489 to 8493)
+    rs = calc.findRSperiod(ema[8493])
     start = ema[8489].time.values[0]
-    end = ema[8493].time.values[-1] 
+    end = ema[8493].time[rs].values[-1] 
     start_time = str(start.astype('M8[D]'))
     end_time = str(end.astype('M8[D]'))
     mean_sea_level = altimetry.adt.sel(time = slice(start_time, end_time)).mean(dim = 'time')
 
-    # Polar front SSH levels 
-    levels = np.arange(-0.7,0.4,0.1)
-    CS = mean_sea_level.plot.contour(colors = 'white', linewidths = 1.8, levels = levels)
-    plt.clabel(CS, inline=True, fontsize=13, fmt = '%1.1f')
+    # SSH contours 
+    levels = np.arange(-0.8,0.3,0.1)
+    CS = mean_sea_level.plot.contour(colors = 'white', linewidths = 1.2, alpha = 0.9, levels = levels)
+    plt.clabel(CS, inline=True, fontsize=12, fmt = '%1.1f')
 
     # Draw float trajectories
     cols = pal.as_hex()[:]
@@ -220,17 +221,17 @@ def floatDomain(floatids, bathymetry, altimetry, extent = [147,173,-60.5,-49.5],
     i = 0
     for floatid in floatids:
         rs = calc.findRSperiod(ema[floatid])
-        ax.plot(ema[floatid].longitude[rs], ema[floatid].latitude[rs],'.-', linewidth = 2.8, markersize=12, c = cols[i], markeredgecolor='k', markeredgewidth= 0.25, alpha = 0.7, zorder = 5)
+        ax.plot(ema[floatid].longitude[rs], ema[floatid].latitude[rs],'.-', linewidth = 2.8, markersize=10, c = cols[i], markeredgecolor='k', markeredgewidth= 0.25, alpha = 0.7, zorder = 5)
         legend.append(f'EM-{floatid}')
         i+=1
 
     ax.legend(legend, loc = 'lower left', prop={'size': 12})
 
-    i = 0
-    for floatid in floatids:
-        ax.plot(ema[floatid].longitude, ema[floatid].latitude,'-', linewidth = 2, c = cols[i], zorder = 4)
-        ax.plot(ema[floatid].longitude, ema[floatid].latitude,'-', linewidth = 3.5, alpha = 0.4, c = 'k', zorder = 3)
-        i+=1
+    # i = 0
+    # for floatid in floatids:
+    #     ax.plot(ema[floatid].longitude, ema[floatid].latitude,'-', linewidth = 2, c = cols[i], zorder = 4)
+    #     ax.plot(ema[floatid].longitude, ema[floatid].latitude,'-', linewidth = 3.5, alpha = 0.4, c = 'k', zorder = 3)
+    #     i+=1
 
     plt.ylabel(u'Latitude (\N{DEGREE SIGN}N)')
     plt.xlabel(u'Longitude (\N{DEGREE SIGN}E)')

@@ -163,7 +163,7 @@ def calcEKE(float_num, floatid, alt_ds = None, altimetry = True, floats = False,
         # mke = 0.5*(u_bar**2 + v_bar**2)
         EKE = 0.5*((u-u_bar)**2 + (v-v_bar)**2)
 
-    return EKE
+    return EKE, u.sel(time = slice(start,end))
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1052,6 +1052,15 @@ def potentialVorticity(float_num, floatid, smooth = True, window = 75, on_dens =
         return PV_on_dens     
     else:
         return PV 
+    
+    
+def ErtelPV_approximation(N2, dvdx, f, dvdz, dbdx):
+    # As in Thompson et al. (2016), Naveira Garabato et al. (2019) and Archer et al. (2020)
+
+    PV = (f + dvdx)*N2 - dvdz*dbdx
+
+    return PV
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1126,8 +1135,11 @@ def RiNumber(N2, b = None, lat = None, u = None, v = None, smooth_vels = False, 
             u = vel.smooth_prof_by_prof(u, window = window, print_info = False)
             v = vel.smooth_prof_by_prof(v, window = window, print_info = False)
 
-        dudz = u.differentiate('pressure')
-        dvdz = v.differentiate('pressure')
+        z = gsw.z_from_p(u.pressure, lat[1])
+        dudz = np.gradient(u)[1]/np.gradient(z)
+        dvdz = np.gradient(v)[1]/np.gradient(z)
+        dudz = xr.DataArray(dudz, dims = u.dims, coords = u.coords)
+        dvdz = xr.DataArray(dvdz, dims = u.dims, coords = u.coords)
 
         if len(N2) != len(dudz):
             print('N2 to even x grid')

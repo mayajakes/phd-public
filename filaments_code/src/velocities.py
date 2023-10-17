@@ -623,8 +623,8 @@ def plotSubsurfaceTrajectory(float_num, floatid, u_rel, v_rel, prof, abs_vels = 
 
     if print_offset == True:
         ax.text(0.05, 0.24, 'offset ($m$ $s^{-1}$)', transform = ax.transAxes, fontsize = 12)
-        ax.text(0.06, 0.16, f'u = {u_offset[0]:.2}', transform = ax.transAxes, fontsize = 12)
-        ax.text(0.06, 0.08, f'v = {v_offset[0]:.2}', transform = ax.transAxes, fontsize = 12)
+        ax.text(0.06, 0.16, f'u = {u_offset[0]:.3f}', transform = ax.transAxes, fontsize = 12)
+        ax.text(0.06, 0.08, f'v = {v_offset[0]:.3f}', transform = ax.transAxes, fontsize = 12)
 
     ax.text(0.04, 0.9, f'profile no.: {prof+1} & {prof+1+1}', transform = ax.transAxes, fontsize = 12)
 
@@ -1225,15 +1225,17 @@ def createRotVelDataset(float_num, floatid, u_abs, v_abs, ctd_time, by_dist = Fa
 
     if by_dist == True:
         folder = 'by_distance'
-        rot_vel = xr.Dataset(data_vars=dict(u_rot =(["distance", "pressure"], u_rot.data),
-                                v_rot =(["distance", "pressure"], v_rot.data),
-                                theta =(["distance", "pressure"], theta.data),
-                                stream_brng = (["distance"], along_stream.data)),
-                coords=dict(
-                    brng_lats = ("latitude", brng_lats),
-                    brng_lons = ("longitude", brng_lons),
-                    distance =("distance", dist[rs].data),
-                    pressure = ("pressure", float_num.pressure.data),))
+        rot_vel = xr.Dataset(
+            data_vars=dict(
+                u_rot =(["distance", "pressure"], u_rot.data),
+                v_rot =(["distance", "pressure"], v_rot.data),
+                theta =(["distance", "pressure"], theta.data),
+                stream_brng = (["distance"], along_stream.data)),
+            coords=dict(
+                brng_lats = ("latitude", brng_lats),
+                brng_lons = ("longitude", brng_lons),
+                distance =("distance", dist[rs].data),
+                pressure = ("pressure", float_num.pressure.data),))
     else:
         folder = 'by_profile'
         rot_vel = xr.Dataset(data_vars=dict(u_rot =(["profile", "pressure"], u_rot.data),
@@ -1410,7 +1412,7 @@ def plot_along_strm_dir(float_num, along_stream, brng_lats, brng_lons, alt_cmems
         # float track bearing
         ax.quiver(brng_lons[prof1:prof2], brng_lats[prof1:prof2], x1[prof1:prof2], y1[prof1:prof2], color = 'tab:red', scale = scale-0.5)
 
-        ax.legend(['gps', 'velocity at 200 dbar', 'stream bearing'], fontsize = 12, loc = 'lower left')
+        ax.legend(['float location', 'velocity at 200 dbar', 'stream bearing'], fontsize = 12, loc = 'lower left')
         ax.text(0.05, 0.9, f'prof {prof1}-{prof2}', transform = ax.transAxes)
         ax.set_xlim(xmin - 0.3, xmax + 0.4)
         ax.set_ylim(ymin - 0.4, ymax + 0.4)
