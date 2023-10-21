@@ -387,8 +387,7 @@ def interp_nats(data, time_grid):
     nats = np.where(np.isnat(time_grid))[0]
     t = time_grid.astype(np.float64)
     t[nats] = np.nan
-    t_interp = xr.DataArray(t.data).interpolate_na(
-        dim='dim_0', fill_value="extrapolate")
+    t_interp = xr.DataArray(t.data).interpolate_na(dim='dim_0', fill_value="extrapolate")
     t_interp = t_interp.astype('datetime64[ns]')
 
     # # change time coords to interpolated grid

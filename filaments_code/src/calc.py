@@ -479,7 +479,7 @@ def dynamicHeight(float_num, floatid, p0 = 1500, steric = False):
         return dyn_m, dyn_m_500_1500
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-def N2(CT, SA, lat, smooth = True, window = 75):
+def N2(CT, SA, lat, smooth = False, window = 75):
     '''Output: Buoyancy frequency (N squared) at pressure midpoints'''
     f = gsw.f(lat)
     p = CT.pressure
@@ -497,7 +497,7 @@ def N2(CT, SA, lat, smooth = True, window = 75):
     return N2
 
 
-def N2_float(float_num, floatid, smooth = True, window = 75, by_dist = True):
+def N2_float(float_num, floatid, smooth = False, window = 75, by_dist = True):
     '''Output: Buoyancy frequency (N squared) at pressure midpoints'''
     f = gsw.f(float_num.latitude)
     f = np.tile(f, (len(float_num.pressure)-1,1)).transpose()
