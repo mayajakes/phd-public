@@ -267,7 +267,7 @@ def plotSpeedTimeseries(float_num, floatid, u, v, vspan_lim = None):
     ''' Plot surface speed timeseries using the float relative veocities (averaged profile pairs).
     To shade a part of the timeseries, enter the x limits in vspan_lim.''' 
     rs = calc.findRSperiod(float_num)
-    dist = calc.distFromStart(float_num)
+    dist = calc.cum_dist(float_num.longitude, float_num.latitude)
 
     combined_u, combined_v = avgProfilePairs(float_num, u, v)
     speed = calc.speed(combined_u, combined_v)
@@ -711,7 +711,7 @@ def createAbsVelDataset(float_num, floatid, u_rel, v_rel, by_dist = False, save_
     warnings.filterwarnings("ignore", category=RuntimeWarning)
 
     rs = calc.findRSperiod(float_num)
-    dist = calc.distFromStart(float_num)
+    dist = calc.cum_dist(float_num.longitude, float_num.latitude)
     # dist = calc.cum_dist(brng_lons, brng_lats) # TO DO: Use the distance calculated from brng lat and lons 
 
     shp = u_rel[rs].shape
@@ -788,7 +788,7 @@ def calcSpeedAndRotation(float_num, floatid, remove_odd_profiles = True, plot = 
     '''Calculate depth-averaged speed and velocity rotation from 200-1500 dbar'''
 
     rs = calc.findRSperiod(float_num)
-    dist = calc.distFromStart(float_num)
+    dist = calc.cum_dist(float_num.longitude, float_num.latitude)
     
     datadir = os.path.join(os.sep, 'Users', 'mijakes', 'checkouts', 'phd', 'data', 'floats', 'absolute_velocity')
     abs_v = imports.importNetCDF(datadir, 'abs_vel_%s.nc' %floatid, datatype ='by_profile')
@@ -844,7 +844,7 @@ def velShearSection(float_num, floatid, ref = 200, plot = True, remove_odd_profi
     '''Plot velocity shear (angle from 200 dbar) through the water column. Positive values indicate clockwise rotation, 
     negative values indicate anticlockwise rotation  with depth.'''
     rs = calc.findRSperiod(float_num)
-    dist = calc.distFromStart(float_num)
+    dist = calc.cum_dist(float_num.longitude, float_num.latitude)
 
     datadir = os.path.join(os.sep, 'Users', 'mijakes', 'checkouts', 'phd', 'data', 'floats', 'absolute_velocity')
     abs_v = imports.importNetCDF(datadir, 'abs_vel_%s.nc' %floatid, datatype ='by_profile')
@@ -1208,7 +1208,7 @@ def createRotVelDataset(float_num, floatid, u_abs, v_abs, ctd_time, by_dist = Fa
     warnings.filterwarnings("ignore", category=RuntimeWarning)
 
     rs = calc.findRSperiod(float_num)
-    # dist = calc.distFromStart(float_num)
+    # dist = calc.cum_dist(float_num.longitude, float_num.latitude)
 
     lats, lons = float_num.latitude[rs], float_num.longitude[rs]
 
@@ -1511,7 +1511,7 @@ def vert_vel_deriv(float_num, floatid, u, v, smooth_vels = True, save_file = Fal
     lat = float_num.latitude[1]
     z = gsw.z_from_p(float_num.pressure, lat)
 
-    # dist = calc.distFromStart(float_num)
+    # dist = calc.cum_dist(float_num.longitude, float_num.latitude)
     dist = float_num.distance
 
     # CT, SA = settings.remove_bad_T_S(float_num, floatid)
@@ -1602,7 +1602,7 @@ def calc_w(float_num, floatid, u, v, deriv_ds, smooth_vels = True, smooth_gps = 
     t0 = float_num.time[0]
     # rs = calc.findRSperiod(float_num)
 
-    # dist = calc.distFromStart(float_num)
+    # dist = calc.cum_dist(float_num.longitude, float_num.latitude)
     dist = float_num.distance
 
     # CT, SA = settings.remove_bad_T_S(float_num, floatid)

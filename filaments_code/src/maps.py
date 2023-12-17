@@ -60,7 +60,7 @@ def plotMapWithDist(float_num, floatid, altimetry, dotsize = 20, panel = False, 
     plt.rcParams['font.size'] = '14'
 
     rs = calc.findRSperiod(float_num)
-    dist = calc.distFromStart(float_num)
+    dist = calc.cum_dist(float_num.longitude, float_num.latitude)
     
     lst = []
     #distance every 100km

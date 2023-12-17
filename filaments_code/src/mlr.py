@@ -162,8 +162,9 @@ def get_rs_dist(floatids):
     dist = {}
     rs_dist = {}
     for floatid in floatids:
-        rs["{}".format(floatid)] = calc.findRSperiod(ema[floatid])
-        dist["{}".format(floatid)] = calc.distFromStart(ema[floatid])
+        float_num = ema[floatid]
+        rs["{}".format(floatid)] = calc.findRSperiod(float_num)
+        dist["{}".format(floatid)] = calc.cum_dist(float_num.longitude, float_num.latitude)
         rs_dist["{}".format(floatid)] = dist[str(floatid)][rs[str(floatid)]]
         
     return rs_dist 

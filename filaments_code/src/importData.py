@@ -43,7 +43,7 @@ def sub_inertial_ds(ema, floatids, datadir, filename = 'ds_no_inertial_%s_extra_
         rs = calc.findRSperiod(float_num)
 
         if rot_vels is None:
-            dist = calc.distFromStart(float_num)
+            dist = calc.cum_dist(float_num.longitude, float_num.latitude)
             # TO DO: fix this distance calculaiton
         else:
             # use bearing lat and lons for distance calculation
@@ -94,7 +94,7 @@ def sub_inertial_ds(ema, floatids, datadir, filename = 'ds_no_inertial_%s_extra_
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def triaxus_data(datadir, tow_list, folder):
-    '''Import Trisxus data from the voyage.
+    '''Import Triaxus data from the voyage.
     Some tows are classed as separate but run along the same transect, so these are combined together.'''
     triaxus_cast = {}
 

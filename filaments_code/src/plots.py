@@ -52,7 +52,7 @@ def trajectory_sections_and_TS(ema, floatids, sections, alt_cmems,  lons = (148,
         for floatid in floatids:
             float_num = ema[floatid]
             rs = calc.findRSperiod(float_num)
-            dist = calc.distFromStart(float_num)[rs]
+            dist = calc.cum_dist(float_num.longitude, float_num.latitude)[rs]
             float_num = settings.distanceAsCoord(ema[floatid])
             
             lst = []
@@ -222,7 +222,7 @@ def TSdiagrams(floatids, rs = True, save_fig = False):
         SA = float_num.SA
 
         prof_num = np.tile(float_num.profile,(len(float_num.pressure),1))
-        dist = calc.distFromStart(float_num)
+        dist = calc.cum_dist(float_num.longitude, float_num.latitude)
         dist_km = np.tile(dist,(len(float_num.pressure),1))
         
         if rs == True:
@@ -499,7 +499,7 @@ def identifySAF(float_num, floatid, z_max = None, panel = False, ax = None, save
 def sectionsOnD(float_num, floatid, T = True, S = True, U = False, V = False, rs = True, save_fig = False):
     
     on_dens = interp.interpOnDens(float_num)
-    dist = calc.distFromStart(float_num)
+    dist = calc.cum_dist(float_num.longitude, float_num.latitude)
     
     if rs == True: 
         section = calc.findRSperiod(float_num)
@@ -576,7 +576,7 @@ def dynH_ADT(float_num, floatid, alt_cmems, steric = False, panel = False, ax = 
     except:
         rs = slice(0, len(float_num.CT))
 
-    dist = calc.distFromStart(float_num)
+    dist = calc.cum_dist(float_num.longitude, float_num.latitude)
 
     interp_val, lower, upper = stats.temporalError(float_num, alt_cmems.adt, method = 'interp', rs = True)
 
@@ -804,7 +804,7 @@ def plot_T_anomaly(float_num, floatid, zdim = ('pressure', 'potential_density'),
 
 def plotCurvature(float_num, floatid, curv_data, flow = False, save_fig = False, my_path = None):
     
-    dist = calc.distFromStart(float_num)
+    dist = calc.cum_dist(float_num.longitude, float_num.latitude)
     k = curv_data.copy()
 
     if flow == True:
@@ -837,7 +837,7 @@ def plotCurvature(float_num, floatid, curv_data, flow = False, save_fig = False,
 
 def plotSurfVars(float_num, floatid, alt_cmems, save_fig = False, my_path = None):
     rs = calc.findRSperiod(float_num)
-    dist = calc.distFromStart(float_num)
+    dist = calc.cum_dist(float_num.longitude, float_num.latitude)
 
     name = '%s-surface-vars-rs.png' %floatid
     adt = interp.interpToFloat(float_num, alt_cmems.adt)
@@ -889,7 +889,7 @@ def plotSurfVars(float_num, floatid, alt_cmems, save_fig = False, my_path = None
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def colTrajectory(ax2, surf_data, float_num, floatid, alt_cmems, rs = True, msl_contours = True, line_plot = False, save_fig = False, my_path = None, name = None, **kwargs):
-    dist = calc.distFromStart(float_num)
+    dist = calc.cum_dist(float_num.longitude, float_num.latitude)
     latmin, latmax, lonmin, lonmax = -60, -50, 148, 173
     size = (9,10)
     profiles = slice(0,len(float_num.profile))

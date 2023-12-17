@@ -65,7 +65,7 @@ def varToDens(dataArray, float_num=None, floatid=None, pdens=None, dens_interval
         dist = dataArray.distance[ind]
     except:
         print('calculating distance')
-        dist = calc.distFromStart(float_num)[ind]
+        dist = calc.cum_dist(float_num.longitude, float_num.latitude)[ind]
 
     if pdens is None:
         print('calculating density')
@@ -115,7 +115,7 @@ def interpOnDens(float_num, floatid, dens_interval=0.01, pdens=None, rs=False, b
     '''interpolate all 2D variables from the float onto a potential denisty grid'''
 
     if by_dist == True:
-        dist = calc.distFromStart(float_num)
+        dist = calc.cum_dist(float_num.longitude, float_num.latitude)
         dim0 = 'distance'
     else:
         dim0 = 'profile'

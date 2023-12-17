@@ -1,7 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# ### List of functions 
 import os
 import xarray as xr
 import matplotlib.pyplot as plt
@@ -11,8 +7,7 @@ import gsw
 import math
 
 from scipy.signal import savgol_filter
-from pyproj import Transformer
-from pyproj import CRS
+import pyproj
 import warnings
 
 from astropy.convolution import convolve
@@ -25,7 +20,7 @@ import src.velocities as vel
 import src.importData as imports
 
 def findRSperiod(float_num):
-    '''find the profile index in where the rapid sampling ends'''
+    '''Find the profile index where the float rapid sampling ends.'''
     nan_index = np.where(np.isnan(float_num.hpid) == True)
     over250 = np.where(float_num.profile > 251)
     rs_end = np.intersect1d(nan_index, over250)
@@ -37,26 +32,9 @@ def findRSperiod(float_num):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def distFromStart(float_num):
-    '''Cumulative distance from the first profile (km)'''
-    lat = float_num.latitude
-    lon = float_num.longitude
-    
-    dist_between_profiles = np.concatenate((np.array([0]), gsw.distance(lon.values, lat.values)))
-    dist_between_profiles_km = dist_between_profiles/1000
-    dist_from_start = np.nancumsum(dist_between_profiles_km)
-
-    # add to float dataset as a coordinate (dimension)
-    distance = xr.DataArray(dist_from_start, dims = 'distance')
-    float_num = float_num.assign_coords(distance=("distance", distance.data))
-
-    return float_num.distance
-
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
-
 def cum_dist(lons, lats):
     '''Cumulative distance from the first profile (km)'''
-    # use lat an lon positions corresponding to the start of each profile (e.g. surface position for down profiles and bottom of down profile for up profiles)
+    # use lat an lon positions corresponding to the start of each profile (e.g. surface position for down profiles and bottom of down profile for up profiles)?
 
     lats, lons = xr.DataArray(lats.data, dims = 'profile'), xr.DataArray(lons.data, dims = 'profile')
     lats = lats.interpolate_na(dim ='profile')
@@ -73,6 +51,7 @@ def cum_dist(lons, lats):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def tsDensContour(SA, CT):
+    '''Density grid for T-S diagram'''
     # Figure out boudaries (mins and maxs)
     smin = np.nanmin(SA) - (0.01 * np.nanmin(SA))
     smax = np.nanmax(SA) + (0.01 * np.nanmax(SA))
@@ -100,8 +79,44 @@ def tsDensContour(SA, CT):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def speed(u, v):
-    s = np.sqrt(u**2 + v**2)
-    return s
+    '''Calculate current speed (m/s)
+    INPUT: 
+    u = zonal velocity (m/s)
+    v = meridional velocity (m/s)'''
+    return np.sqrt(u**2 + v**2)
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def eddyKineticEnergy(u, v, u_bar, v_bar):
+    '''Calculate eddy kinetic energy
+    INPUT: 
+    u = zonal velocity (m/s)
+    v = meridional velocity (m/s)
+    u_bar, v_bar = mean u and v'''
+
+    # ke = 0.5*(u**2 + v**2)
+    # mke = 0.5*(u_bar**2 + v_bar**2)
+    return 0.5*((u-u_bar)**2 + (v-v_bar)**2)
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def satellite_eke(ugos, vgos, start_time, end_time):
+    '''Calculate eddy kinetic energy (EKE) from satellite geostrophic velocities.
+    INPUTS:
+    ugos, vgos = surface geostrophic velocities derived from satellite sea surface height data
+    start_time, end_time = start and end time for calculation of mean velocities (u_bar and v_bar)'''
+
+    start, end = str(start_time.astype('M8[D]')), str(end_time.astype('M8[D]'))
+    print('mean u and v between {} and {}'.format(start, end))
+
+    # mean U and V 
+    u_bar = ugos.sel(time = slice(start,end)).mean(dim = 'time')
+    v_bar = vgos.sel(time = slice(start,end)).mean(dim = 'time')
+    # calculate EKE (deviation from mean)
+    EKE = eddyKineticEnergy(ugos, vgos, u_bar, v_bar)
+
+    return EKE
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -114,13 +129,12 @@ def calcEKE(float_num, floatid, alt_ds = None, altimetry = True, floats = False,
         # changing the mean window doesn't seem to affect the value (little interannual)
         start_time = float_num.time[0].values - np.timedelta64(365*2,'D')
         end_time = start_time + np.timedelta64(365*3,'D')
-        start, end = str(start_time.astype('M8[D]')), str(end_time.astype('M8[D]'))
 
-        # alt_ds.adt.sel(time = start)
-        print('mean u and v between {} and {}'.format(start, end))
         u, v = alt_ds.ugos, alt_ds.vgos # multiply by 100 to convert m/s to cm/s
 
         if interp_to_flt == True:
+            print('mean u and v between {} and {}'.format(start, end))
+            start, end = str(start_time.astype('M8[D]')), str(end_time.astype('M8[D]'))
             # surface altimetry u and v at float locations 
             u_alt = u.interp(latitude=float_num.latitude, longitude=float_num.longitude)
             v_alt = v.interp(latitude=float_num.latitude, longitude=float_num.longitude)
@@ -131,25 +145,21 @@ def calcEKE(float_num, floatid, alt_ds = None, altimetry = True, floats = False,
             u = u_alt.interp(time = float_num.time)
             v = v_alt.interp(time = float_num.time)
             # calculate EKE (deviation from 1-yr mean)
-            eke = 0.5*((u-u_bar)**2 + (v-v_bar)**2)
+            eke = eddyKineticEnergy(u, v, u_bar, v_bar)
 
             EKE = []
             for i in range(0, len(float_num.profile)):
                 value = eke.isel(time = i, latitude = i, longitude = i).values
                 EKE.append(value.tolist())
         else:
-            # mean U and V 
-            u_bar = u.sel(time = slice(start,end)).mean(dim = 'time')
-            v_bar = v.sel(time = slice(start,end)).mean(dim = 'time')
-            # calculate EKE (deviation from mean)
-            EKE = 0.5*((u-u_bar)**2 + (v-v_bar)**2)
+            EKE = satellite_eke(u, v, start_time, end_time)
 
     if floats == True:
         # use absolute velocities interpolated onto potential density 
         u = interp.varToDens(abs_v.u_abs, float_num  = float_num, floatid = floatid)
         v = interp.varToDens(abs_v.v_abs, float_num  = float_num, floatid = floatid)
-        u, v = vel.setAbsVelToNan(floatid, u), vel.setAbsVelToNan(floatid, v)
-        # u, v = u_dens*100, v_dens*100 # m/s to cm/s
+        # u, v = vel.setAbsVelToNan(floatid, u), vel.setAbsVelToNan(floatid, v)
+        # u, v = u_dens*100, v_dens*100 # convert m/s to cm/s
 
         if smooth_vels == True:
             u = vel.smooth_prof_by_prof(u, window = 75, print_info = False)
@@ -159,48 +169,9 @@ def calcEKE(float_num, floatid, alt_ds = None, altimetry = True, floats = False,
         u_bar = u[rs].mean(dim = 'distance',skipna = True)
         v_bar = v[rs].mean(dim = 'distance',skipna = True)
 
-        # ke = 0.5*(u**2 + v**2)
-        # mke = 0.5*(u_bar**2 + v_bar**2)
-        EKE = 0.5*((u-u_bar)**2 + (v-v_bar)**2)
+        EKE = eddyKineticEnergy(u, v, u_bar, v_bar)
 
     return EKE, u.sel(time = slice(start,end))
-
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-def rollingEKE(float_num, floatid, alt_ds = None, altimetry = True, floats = False, abs_v = None, window = 5, min_prof = 3):
-
-    if altimetry == True:
-        u, v = alt_ds.ugos, alt_ds.vgos
-        # interpolate altimetry velocities onto float profile locations and times
-        u_alt = interp.interpToFloat(float_num, u, return_xr = True)
-        v_alt = interp.interpToFloat(float_num, v, return_xr = True)
-
-        # centered rolling mean along the float track
-        u_bar = u_alt.rolling(profile = window, center = True, min_periods = min_prof).mean()
-        v_bar = v_alt.rolling(profile = window, center = True, min_periods = min_prof).mean()
-
-        eke = 0.5*((u_alt-u_bar)**2 + (v_alt-v_bar)**2)
-
-        return eke
-    
-    if floats == True:
-        u_smooth = vel.smooth_prof_by_prof(abs_v.u_abs, window = 75)
-        v_smooth = vel.smooth_prof_by_prof(abs_v.v_abs, window = 75)
-
-        u = interp.varToDens(u_smooth, float_num = float_num, floatid = floatid)
-        v = interp.varToDens(v_smooth, float_num = float_num, floatid = floatid)
-
-        # remove erroneous velocity profiles
-        u, v = vel.setAbsVelToNan(floatid, u), vel.setAbsVelToNan(floatid, v)
-
-        # centered rolling mean along isopycnals
-        u_bar = u.rolling(distance = window, center = True, min_periods = min_prof).mean()
-        v_bar = v.rolling(distance = window, center = True, min_periods = min_prof).mean()
-
-        eke = 0.5*((u-u_bar)**2 + (v-v_bar)**2)
-        flt_speed = speed(u,v)
-
-        return eke, flt_speed
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -208,9 +179,11 @@ def sshGrad(dataArray):
     '''Sea surface height gradient from satellite altimetry. 
     Also works with other spatial data variables with dimensions latitude and longitude.'''
 
-    deg_to_m = 111195.
-    grad_x = dataArray.differentiate('longitude')/deg_to_m
-    grad_y = dataArray.differentiate('latitude')/deg_to_m
+    xx, yy = xyTransform(dataArray.longitude, dataArray.latitude, coords = True) 
+
+    grad_x = np.gradient(dataArray)[1] / np.gradient(xx)[1]
+    grad_y = np.gradient(dataArray)[0] / np.gradient(yy)[0]
+        
     grad_total = np.sqrt(grad_y**2 + grad_x**2)
 
     if len(np.gradient(dataArray)) > 2:
@@ -285,8 +258,8 @@ def potentialDensity(pressure, SA, CT, p_ref = 0, anomaly = True):
 def densityLayerThickness(float_num, floatid, dmin, dmax, plot = True):
     '''Calculates thicnkess of the isopycnal layer between two density classes (dmin and dmax)'''
     rs = findRSperiod(float_num)
-    dist = distFromStart(float_num)
-    
+    dist = cum_dist(float_num.longitude, float_num.latitude)
+
     newFloat = settings.distanceAsCoord(float_num)
     CT, SA = settings.remove_bad_T_S(newFloat, floatid)
 
@@ -364,7 +337,7 @@ def MLD_float(float_num, floatid, plot = True):
 
     if plot == True:
         rs = findRSperiod(float_num)
-        dist = distFromStart(float_num)
+        dist = cum_dist(float_num.longitude, float_num.latitude)
 
         fig, ax = plt.subplots(figsize = (10,3))
         ax.scatter(dist[rs], mld[rs], c = 'grey', s= 15)
@@ -416,7 +389,7 @@ def find_T_mld(float_num, floatid, mld, plot = True):
 
     if plot == True:
         rs = findRSperiod(float_num)
-        dist = distFromStart(float_num)
+        dist = cum_dist(float_num.longitude, float_num.latitude)
 
         fig, ax = plt.subplots(figsize = (10,3))
         ax.scatter(dist[rs], T_mld[rs], s = 10)
@@ -454,7 +427,7 @@ def dynamicHeight(float_num, floatid, p0 = 1500, steric = False):
     try:
         dist = float_num.distance
     except:
-        dist = distFromStart(float_num)
+        dist = cum_dist(float_num.longitude, float_num.latitude)
 
     dyn_m = gsw.geo_strf_dyn_height(SA, CT, p, p_ref=p0, axis=1)
     const_grav = 9.7963  # Griffies, 2004.
@@ -506,7 +479,7 @@ def N2_float(float_num, floatid, smooth = False, window = 75, by_dist = True):
     [N2,p_midarray_n2] = gsw.Nsquared(SA, CT, float_num.pressure, axis = 1) # axis = dimension along which pressure increases
     
     if by_dist == True:
-        dist = distFromStart(float_num)
+        dist = cum_dist(float_num.longitude, float_num.latitude)
         N2 = xr.DataArray(data = N2, dims = ["distance", "pressure"],coords = dict(pressure=(["pressure"], 
             p_midarray_n2[0]),distance=(["distance"], dist.data),))
     else:
@@ -601,8 +574,14 @@ def calc_dx_dy(float_num, coord = True):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def xyTransform(lons, lats, coords = False):
-    crs = CRS.from_epsg(3857)
-    proj = Transformer.from_crs(crs.geodetic_crs, crs)
+    '''Convert lon and lat to x and y (m)'''
+    # transform = pyproj.Proj('+proj=utm +zone=55 +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs')
+    # WGS84 = pyproj.Proj('EPSG:4326')
+    # lnln, ltlt = np.meshgrid(dataArray.longitude.data, dataArray.latitude.data)
+    # xx, yy = pyproj.transform(WGS84, transform, ltlt, lnln)
+
+    crs = pyproj.CRS.from_epsg(3857)
+    proj = pyproj.Transformer.from_crs(crs.geodetic_crs, crs)
 
     if coords == True:
         coords = []
@@ -991,7 +970,7 @@ def estimateDiffusivity(k_ds, float_num, var = 'diffusivity',  by_dist = True, z
     k_flt = interp.interpToFloat(float_num, k_ds[var], location_only = True, zdim = zdim)
 
     if by_dist == True:
-        dist = distFromStart(float_num)           
+        dist = cum_dist(float_num.longitude, float_num.latitude)        
         k_flt_xr = xr.DataArray(data=k_flt, dims=["distance", "depth"], coords=dict(
         distance=(["distance"], dist.data),
         depth=(["depth"], k_flt.depth.data)),)
@@ -1080,7 +1059,7 @@ def PV_gradient(float_num, floatid, smooth = False):
 def velocity_error(float_num, floatid, abs_v, alt_cmems):
     '''Average speed in the mixed layer (from floats) minus interpolated satellite geostrophic velocities.'''
     rs = findRSperiod(float_num)
-    dist = distFromStart(float_num)
+    dist = cum_dist(float_num.longitude, float_num.latitude)
     mld = MLD_float(float_num, floatid, plot = False)
     mld = xr.DataArray(mld[rs]).interpolate_na(dim = 'dim_0', use_coordinate = True)
 
