@@ -74,7 +74,7 @@ def save_figure(fig, my_path, name, dpi = 300, pad = 0.2):
     # remove old figure
     if os.path.isfile(strFile):
         os.remove(strFile)
-    fig.savefig(strFile, dpi = dpi, bbox_inches='tight', pad_inches= pad)
+    fig.savefig(strFile, dpi = dpi, bbox_inches='tight', pad_inches= pad, transparent=True, facecolor = 'w')
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
