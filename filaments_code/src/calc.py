@@ -171,19 +171,31 @@ def calcEKE(float_num, floatid, alt_ds = None, altimetry = True, floats = False,
 
         EKE = eddyKineticEnergy(u, v, u_bar, v_bar)
 
-    return EKE, u.sel(time = slice(start,end))
+    return EKE
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def sshGrad(dataArray):
     '''Sea surface height gradient from satellite altimetry. 
     Also works with other spatial data variables with dimensions latitude and longitude.'''
+    # lnln, ltlt = np.meshgrid(dataArray.longitude.data, dataArray.latitude.data)
+    # xx, yy = xyTransform(lnln, ltlt, coords = False) 
+    # grad_x = np.gradient(dataArray)[1] / np.gradient(xx)[1]
+    # grad_y = np.gradient(dataArray)[0] / np.gradient(yy)[0]
 
-    xx, yy = xyTransform(dataArray.longitude, dataArray.latitude, coords = True) 
+    lons = dataArray.longitude.data
+    lats = np.tile(dataArray.latitude.mean(), len(lons))
+    dx = gsw.distance(lons, lats)[0]
 
-    grad_x = np.gradient(dataArray)[1] / np.gradient(xx)[1]
-    grad_y = np.gradient(dataArray)[0] / np.gradient(yy)[0]
-        
+    lats = dataArray.latitude.data
+    lons = np.tile(dataArray.longitude.mean(), len(lats))
+    dy = gsw.distance(lons, lats)[0]
+
+    dimx = int(np.where(np.asarray(dataArray.dims) == 'longitude')[0])
+    dimy = int(np.where(np.asarray(dataArray.dims) == 'latitude')[0])
+
+    grad_x = np.gradient(dataArray)[dimx]/dx
+    grad_y = np.gradient(dataArray)[dimy]/dy
     grad_total = np.sqrt(grad_y**2 + grad_x**2)
 
     if len(np.gradient(dataArray)) > 2:
@@ -577,7 +589,7 @@ def xyTransform(lons, lats, coords = False):
     '''Convert lon and lat to x and y (m)'''
     # transform = pyproj.Proj('+proj=utm +zone=55 +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs')
     # WGS84 = pyproj.Proj('EPSG:4326')
-    # lnln, ltlt = np.meshgrid(dataArray.longitude.data, dataArray.latitude.data)
+    # lnln, ltlt = np.meshgrid(lons, lats)
     # xx, yy = pyproj.transform(WGS84, transform, ltlt, lnln)
 
     crs = pyproj.CRS.from_epsg(3857)

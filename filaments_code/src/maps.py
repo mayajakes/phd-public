@@ -57,7 +57,7 @@ def plotFloatTrajectory(float_num, floatid, altimetry, save_fig = False, my_path
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def plotMapWithDist(float_num, floatid, altimetry, dotsize = 20, panel = False, dist_list = None, save_fig = False,  my_path = None):
-    plt.rcParams['font.size'] = '14'
+    plt.rcParams['font.size'] = '12'
 
     rs = calc.findRSperiod(float_num)
     dist = calc.cum_dist(float_num.longitude, float_num.latitude)
@@ -76,17 +76,13 @@ def plotMapWithDist(float_num, floatid, altimetry, dotsize = 20, panel = False, 
     lon =slice(148,160) # 160
     lat = slice(-57,-51) # -57
 
-    SAF, PF, SACCF = settings.frontSSH(reference = ('KimOrsi'))
-    # levels = np.arange(0,0.5,0.1)
-    levels = np.arange(0,0.4,0.1)
+    # SAF, PF, SACCF = settings.frontSSH(reference = ('KimOrsi'))
+    levels = np.arange(-0.7,0.4,0.1)
      
     # colors for distance markers every 100 km
     colors = ['#FFE0E0','#FFB2B2', '#F28A8A', '#E85555', '#D84747', '#C93636', '#963333', '#7F1A1A', '#691515', '#5B1313', '#440000', '#2E0000', '#040000']
 
     if panel == True:
-        # lon =slice(148.5,155.5) 
-        # lat = slice(-56.5,-51.5) 
-        
         fig, axs = plt.subplots(nrows = 2, ncols=3, sharey = True, sharex = True, figsize = (16,8))
         axs = axs.flatten()
 
@@ -106,17 +102,12 @@ def plotMapWithDist(float_num, floatid, altimetry, dotsize = 20, panel = False, 
             im = mean_sea_level.sel(longitude = lon, latitude = lat).plot(ax = axs[i], alpha = 0.4,  cmap = 'viridis', vmin = -1, vmax = 0.5,
                                                         add_colorbar = False)
 
-            CS = mean_sea_level.plot.contour(ax = axs[i], colors = 'black', alpha = 0.3, linewidths = 2, levels = PF)
-            plt.clabel(CS, inline=True, fontsize=10, fmt = '%1.1f')
-            CS = mean_sea_level.plot.contour(ax = axs[i], colors = 'w', alpha = 0.9, linewidths = 1.8, levels = SAF)
-            plt.clabel(CS, inline=True, fontsize=10, fmt = '%1.1f')
-            CS = mean_sea_level.plot.contour(ax = axs[i], colors = 'grey', alpha = 0.4, linewidths = 1.8, levels = levels)
+            CS = mean_sea_level.plot.contour(ax = axs[i], colors = 'grey', alpha = 0.7, linewidths = 1, levels = levels)
             plt.clabel(CS, inline=True, fontsize=10, fmt = '%1.1f')
 
             axs[i].scatter(float_num.longitude, float_num.latitude, c='grey', s= dotsize,  zorder = 2)
             axs[i].scatter(float_num.longitude[rs], float_num.latitude[rs], c='w', s= dotsize, zorder = 2)
-            axs[i].scatter(float_num.longitude[i_1:i_2], float_num.latitude[i_1:i_2], c = 'darkgrey', s= dotsize-4, zorder = 2, alpha = 0.5)
-            # axs[i].scatter(float_num.longitude[i_1:i_2], float_num.latitude[i_1:i_2], c = 'w', s= dotsize-4, zorder = 2)
+            axs[i].scatter(float_num.longitude[i_1:i_2], float_num.latitude[i_1:i_2], c = 'darkgrey', s= dotsize-4, linewidths = 0.8, edgecolors = 'k', zorder = 2)
 
             # sequentially colour point every 100 km distance
             if dist[rs][-1] < 900:
@@ -132,7 +123,6 @@ def plotMapWithDist(float_num, floatid, altimetry, dotsize = 20, panel = False, 
             axs[i].text(0.03, 0.03, f'{start_time}', transform = axs[i].transAxes)
 
             if i == 5:
-                # axs[5].text(0.7, 0.93, f'{end_time}', transform = axs[5].transAxes)
                 print('float {} end of rs: {}'.format(floatid, str(float_num.time[rs][-1].values.astype('M8[D]'))))
             i += 1
         
@@ -154,11 +144,7 @@ def plotMapWithDist(float_num, floatid, altimetry, dotsize = 20, panel = False, 
                                                             cbar_kwargs=dict(label='Sea Level (m)'))
 
 
-        CS = mean_sea_level.plot.contour(colors = 'dimgrey', alpha = 0.7, linewidths = 1.8, levels = PF)
-        plt.clabel(CS, inline=True, fontsize=10, fmt = '%1.1f')
-        CS = mean_sea_level.plot.contour(colors = 'w', alpha = 0.9, linewidths = 1.8, levels = SAF)
-        plt.clabel(CS, inline=True, fontsize=10, fmt = '%1.1f')
-        CS = mean_sea_level.plot.contour(colors = 'gray', alpha = 0.4, linewidths = 1.8, levels = levels)
+        CS = mean_sea_level.plot.contour(colors = 'gray', alpha = 0.7, linewidths = 1, levels = levels)
         plt.clabel(CS, inline=True, fontsize=10, fmt = '%1.1f')
 
         plt.scatter(float_num.longitude, float_num.latitude, c='grey', s = 20, zorder = 2)

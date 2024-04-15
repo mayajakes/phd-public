@@ -700,7 +700,7 @@ def surfVectors(float_num, floatid, alt_cmems, gradvel, pcolor_data, ind_list, e
 
 def weekPanel(floatid, float_num, dataArray, ssh, weeks, contours, col = None, label = None, rotate = False, save_fig = False, name = None, my_path = None, **kwargs):
 
-    fig, axs = plt.subplots(nrows = 1, ncols=3, sharey = True, sharex = True, figsize = (12,4)) # (16,9)
+    fig, axs = plt.subplots(nrows = 2, ncols=3, sharey = True, sharex = True, figsize = (16,9)) # nrows = 1, figsize = (12,4)
     axs = axs.flatten()
 
     i = 0
