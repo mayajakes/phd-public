@@ -1,5 +1,4 @@
 *.pyc
-*.gif
 *.pdf
 *.xml
 *-checkpoint.ipynb
