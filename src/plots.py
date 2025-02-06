@@ -328,4 +328,33 @@ def colTrajectory(ax2, surf_data, float_num, floatid, alt_cmems, rs = True, msl_
     else:
         return im2, msl
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def concatTickValues(data_dict):
+    '''Input: a list of the last distance value of each float.'''
+
+    # find indices where new float starts
+    data_ct = ct.joinFloats(data_dict, 'distance', new_dim = False)
+    flt_ind = np.where(data_ct.distance == 0)[0].tolist()
+    flt_ind.remove(flt_ind[0])
+    # concatenate with total distance
+    data = ct.joinFloats(data_dict, 'distance', new_dim = True)
+    flt_dist_loc = data.distance[flt_ind].data
+
+    if len(data_dict) == 4:
+        ticks =[0,300,600,flt_dist_loc[0], flt_dist_loc[0]+300, flt_dist_loc[0]+600, flt_dist_loc[0]+900, flt_dist_loc[0]+1200, 
+                flt_dist_loc[1], flt_dist_loc[1]+300, flt_dist_loc[1]+600, flt_dist_loc[1]+900, 
+                flt_dist_loc[2], flt_dist_loc[2]+300, flt_dist_loc[2]+600]
+
+        values = [0,300,600,0,300,600,900,1200, 0, 300, 600, 900, 0, 300, 600]
+
+    elif len(data_dict) == 3:
+
+        ticks =[0,300,600,flt_dist_loc[0], flt_dist_loc[0]+300, flt_dist_loc[0]+600, flt_dist_loc[0]+900,
+                flt_dist_loc[1], flt_dist_loc[1]+300, flt_dist_loc[1]+600]
+
+        values = [0,300,600, 0, 300, 600, 900, 0, 300, 600]
+
+    return ticks, values, flt_dist_loc
 

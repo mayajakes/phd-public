@@ -35,7 +35,6 @@ def findRSperiod(float_num):
 def cum_dist(lons, lats):
     '''Cumulative distance from the first profile (km)'''
     # use lat an lon positions corresponding to the start of each profile (e.g. surface position for down profiles and bottom of down profile for up profiles)?
-
     lats, lons = xr.DataArray(lats.data, dims = 'profile'), xr.DataArray(lons.data, dims = 'profile')
     lats = lats.interpolate_na(dim ='profile')
     lons = lons.interpolate_na(dim ='profile')
@@ -221,12 +220,13 @@ def potentialDensity(pressure, SA, CT, p_ref = 0, anomaly = True):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def MLD(pdens, criteria = 0.05, pref = 10):
+def MLD(pdens, criteria = 0.05, pref = 10, pref_max = 30, return_drho = False):
     '''Calculate mixed layer depth using criteria from Dove et al. (2021):  density difference greater than 0.05 kg/m3 
     from a 10 dbar (surface) reference level.
     Input: xarray DataArray of potential density'''
 
     mld = []
+    drho = xr.zeros_like(pdens)*np.nan
 
     for i in range(0,len(pdens)):
         ind_nonan = np.where(~np.isnan(pdens[i]))[0]
@@ -234,23 +234,27 @@ def MLD(pdens, criteria = 0.05, pref = 10):
 
         if len(pdens_nonan) == 0: # empty profile
             mld.append(np.nan)
-        # if the first non nan value is at a depth greater than 20 dbar, set as nan
-        elif pdens_nonan[0].pressure > 20:
+        # if the first non nan value is at a depth greater than pref_max, set as nan
+        elif pdens_nonan[0].pressure.data > pref_max:
             mld.append(np.nan)
         else:
             # find the pressure level at which the density difference from 10dbar reference is greater than 0.05 kg/m3.
             pd0 = pdens_nonan.sel(pressure = pref, method = 'nearest')
-            dens_diff = pdens_nonan - pd0
+            dens_diff = pdens[i] - pd0
+            drho[i] = dens_diff
             mask = (dens_diff >= criteria) & (dens_diff.pressure > pd0.pressure)
             
-            if len(pdens_nonan.pressure[mask]) == 0:
+            if len(pdens[i].pressure[mask]) == 0:
                 mld.append(np.nan)
             else:
-                mld.append(pdens_nonan.pressure[mask][0].data.tolist())
+                mld.append(pdens[i].pressure[mask][0].data.tolist())
             
     mld = xr.DataArray(np.asarray(mld), dims = pdens.dims[0], coords = pdens[pdens.dims[0]].coords)
 
-    return mld
+    if return_drho == True:
+        return mld, drho
+    else:
+        return mld
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -893,6 +897,7 @@ def RiNumber(N2, b = None, lat = None, u = None, v = None, smooth_vels = False, 
         if smooth_vels == True:
             u = vel.smooth_prof_by_prof(u, window = window, print_info = False)
             v = vel.smooth_prof_by_prof(v, window = window, print_info = False)
+            N2 = vel.smooth_prof_by_prof(N2, window = window, print_info = False)
 
         z = gsw.z_from_p(u.pressure, lat[1])
         dudz = np.gradient(u)[1]/np.gradient(z)
@@ -1062,21 +1067,52 @@ def direct_lateral_heat_flux(CT, rho, velocity, mld, order = 4, window = 125):
 
 # -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def mean_below_ml(dataArray, mld, zmax = 27.7, zdim = 'potential_density'):
+def mean_below_ml(dataArray, mld, zmax = 27.7, zdim = 'potential_density', integrate = False, median = False):
     '''Average in profile data below the mixed layer to a certain maximum density or pressure (zmax)'''
     # dz = pressure difference added to the base of the mixed layer e.g. dz = 10 adds 10 dbar onto the base of the mixed layer before doing the average
 
     lst = []
     for i in range(0, len(dataArray)):
         if zdim == 'potential_density':
-            mean = dataArray[i].sel(potential_density = slice(mld[i], zmax)).mean(dim = zdim, skipna = True)
+            if integrate == True:
+                d = np.trapz(dataArray[i].sel(potential_density = slice(mld[i], zmax)).dropna(dim = 'potential_density'))
+            elif median == True:
+                d = dataArray[i].sel(potential_density = slice(mld[i], zmax)).median(dim = zdim, skipna = True)
+            else:
+                d = dataArray[i].sel(potential_density = slice(mld[i], zmax)).mean(dim = zdim, skipna = True)
         else:
-            mean = dataArray[i].sel(pressure = slice(mld[i], zmax)).mean(dim = zdim, skipna = True)
-        lst.append(mean)
+            if median == True:
+                d = dataArray[i].sel(pressure = slice(mld[i], zmax)).median(dim = zdim, skipna = True)
+            else:
+                d = dataArray[i].sel(pressure = slice(mld[i], zmax)).mean(dim = zdim, skipna = True)
+        lst.append(d)
 
     lst = np.asarray(lst)
     return lst
 
+# -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def average_in_density_on_pgrid(data, pdens, dens_min, dens_max, integrate = False, median = False):
+    '''Average between density range when data is gridded on pressure'''
+
+    avg_data = []
+    dens_copy = pdens.copy()
+    for j in range(0, len(dens_copy)):
+        dens_copy[j][np.isnan(dens_copy[j])] = 0
+        max_idx, value = stats.find_nearest(dens_copy[j], dens_max[j])
+        min_idx, value = stats.find_nearest(dens_copy[j], dens_min[j])
+
+        if integrate == True:
+            d = np.trapz(data[j][min_idx:max_idx].dropna(dim = 'pressure'))
+        elif median == True:
+            d = data[j][min_idx:max_idx].median(skipna=True).data
+        else:
+            d = data[j][min_idx:max_idx].mean(skipna=True).data
+
+        avg_data.append(float(d))
+
+    da = xr.DataArray(np.asarray(avg_data), dims = data.dims[0], coords = data.coords[data.dims[0]].coords)
+    return da
 
 # -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 

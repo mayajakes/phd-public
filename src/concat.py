@@ -45,7 +45,8 @@ def concatenated_flts(data, floatids, interp_to_flt = False, interp_to_dens = Fa
 
     if interp_to_dens == True:
         ds_concat = joinFloats(d_rs, 'distance')
-        xr_ds = toDens(ds_concat, floatids, pdens = pdens, dist = True)
+        # xr_ds = toDens(ds_concat, floatids, pdens = pdens, dist = True)
+        xr_ds = toDens(ds_concat, pdens, dist = True)
 
         flt_ind = np.where(xr_ds.distance == 0)[0].tolist()
         flt_ind.append(len(xr_ds))

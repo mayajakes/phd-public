@@ -166,15 +166,16 @@ def floatDomain(floatids, bathymetry, altimetry, extent = [147,173,-60.5,-49.5],
 
     # Draw float trajectories
     cols = pal.as_hex()[:]
-    legend = []
+    legend1 = []
     i = 0
     for floatid in floatids:
         rs = calc.findRSperiod(ema[floatid])
         ax.plot(ema[floatid].longitude[rs], ema[floatid].latitude[rs],'.-', linewidth = 2.8, markersize=10, c = cols[i], markeredgecolor='k', markeredgewidth= 0.25, alpha = 0.7, zorder = 5)
-        legend.append(f'EM-{floatid}')
+        legend1.append(f'EM-{floatid}')
         i+=1
 
-    ax.legend(legend, loc = 'lower left', prop={'size': 12})
+    legend1 = ax.legend(legend1, loc = 'lower left', prop={'size': 12})
+    ax.add_artist(legend1)
 
     # i = 0
     # for floatid in floatids:
