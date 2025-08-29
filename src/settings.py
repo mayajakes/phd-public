@@ -108,7 +108,7 @@ def frontSSH(reference = ('KimOrsi', 'SokRin')):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # to do : make this function generalised to work for different datasets
-def distanceAsCoord(ds, float_num = None, rs = False, xdim = 'profile', zdim = 'pressure'):
+def distanceAsCoord(ds, float_num = None, rs = None, xdim = 'profile', zdim = 'pressure'):
     '''create new xarray dataset with distance as the x dimension (not profile).
     Second input (float_num) is used to calculate distance and rs period'''
     if float_num is not None:
@@ -117,13 +117,14 @@ def distanceAsCoord(ds, float_num = None, rs = False, xdim = 'profile', zdim = '
         dist = calc.cum_dist(ds.longitude, ds.latitude)
         # dist = calc.distFromStart(ds)
 
-    if rs == True:
+    if rs is None:
         try: 
             prof = calc.findRSperiod(ds)
         except:
             prof = calc.findRSperiod(float_num)  
     else:
-        prof = slice(0, len(dist))
+        prof = slice(0, rs)
+        # prof = slice(0, len(dist))
 
     dict = {}
     for var in list(ds.data_vars):
@@ -201,7 +202,7 @@ def half_inertial_averaging(data, float_num, dim = 'profile'):
             
         else:
             if len(data.shape)>1:
-                d_no_inert[prof, :] = data[[prof,prof2], :].mean(dim = dim,  skipna = True)
+                d_no_inert[prof, :] = data[[prof,prof2], :].mean(dim = dim, skipna = False)
             else:
                 d_no_inert[prof] = data[[prof,prof2]].mean(dim = dim, skipna = True)
         
@@ -214,8 +215,9 @@ def create_sub_inertial_ds(float_num, floatid, abs_vels, rot_vels, ctd_time, sav
 
     print('Commencing half-inertial pair averaging...')
     rs = calc.findRSperiod(float_num)
-    CT, SA = remove_bad_T_S(float_num, floatid)
 
+    ### extra quality control for Macquarie 2018 floats
+    CT, SA = remove_bad_T_S(float_num, floatid)
     u = vel.erroneous_rel_vels(abs_vels.u_abs, floatid)
     v = vel.erroneous_rel_vels(abs_vels.v_abs, floatid)
     u_abs = vel.setAbsVelToNan(floatid, u).interpolate_na('profile', method = 'linear', max_gap = 3)
@@ -265,6 +267,65 @@ def create_sub_inertial_ds(float_num, floatid, abs_vels, rot_vels, ctd_time, sav
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def create_sub_inertial_ds_general(float_num, floatid, savedir = None, filename = 'ds_no_inertial', rot_vels = None):
+    ''' Half inertial pair averaging of all data variables into new dataset - this does not interpolate back onto original times. Use the imports.sub_inertial_ds function for this.'''
+
+    print('Commencing half-inertial pair averaging...')
+    rs = calc.findRSperiod(float_num)
+
+    # CT_no_inert = half_inertial_averaging(float_num.CT[rs].interpolate_na('profile', method = 'linear', max_gap = 3), float_num)
+    # SA_no_inert = half_inertial_averaging(float_num.SA[rs].interpolate_na('profile', method = 'linear', max_gap = 3), float_num)
+    CT_no_inert = half_inertial_averaging(float_num.CT[rs], float_num)
+    SA_no_inert = half_inertial_averaging(float_num.SA[rs], float_num)
+
+    u_abs_no_inert = half_inertial_averaging(float_num.u_abs[rs], float_num, dim = 'profile')
+    v_abs_no_inert = half_inertial_averaging(float_num.v_abs[rs], float_num, dim = 'profile')
+
+    # rotated velocities
+    if rot_vels is not None:
+        along_interp = rot_vels.u_rot[rs].interpolate_na('profile',  method = 'linear', max_gap = 3)
+        cross_interp = rot_vels.v_rot[rs].interpolate_na('profile', method = 'linear', max_gap = 3)
+        along_no_inert = half_inertial_averaging(along_interp, float_num, dim = 'profile')
+        cross_no_inert = half_inertial_averaging(cross_interp, float_num, dim = 'profile')
+
+    ctd_t_no_inert = half_inertial_averaging(float_num.ctd_t[rs], float_num, dim = 'time')
+    t_no_inert = half_inertial_averaging(float_num.time[rs], float_num, dim = 'time') 
+
+    lat_mid = half_inertial_averaging(float_num.latitude[rs], float_num, dim = 'latitude')
+    lon_mid = half_inertial_averaging(float_num.longitude[rs], float_num, dim = 'longitude')
+    
+    ds_no_inertial = xr.Dataset(data_vars=dict(
+                                    CT=(["time", "pressure"], CT_no_inert.data),
+                                    SA = (["time", "pressure"], SA_no_inert.data),
+                                    u_abs = (["time", "pressure"], u_abs_no_inert.data, {'description':'absolute eastward velocity'}),
+                                    v_abs = (["time", "pressure"], v_abs_no_inert.data, {'description':'absolute northward velocity'}),
+                                    ctd_t = (["time", "pressure"], ctd_t_no_inert.data),
+                                    ),
+                                coords = dict(
+                                    pressure = ('pressure', float_num.pressure.data), 
+                                    time = ('time', t_no_inert.data, {'description':'time_mid'}), 
+                                    latitude = (["latitude"], lat_mid.data, {'description':'lat_mid'}),
+                                    longitude = (["longitude"], lon_mid.data, {'description':'lon_mid'})
+                                    ), 
+                                attrs=dict(description=f"{floatid}: Dataset of variables with inertial oscillations removed using half inertial pair averaging"),)
+    
+    ds_no_inertial.attrs = {'creation_date':str(datetime.datetime.now()), 'author':'Maya Jakes', 'email':'maya.jakes@utas.edu.au'}
+
+    if rot_vels is not None:
+        ds_no_inertial['u_rot'] = xr.DataArray(data = along_no_inert.data, dims = ["time", "pressure"], attrs = {'description':'along-stream absolute velocity'})
+        ds_no_inertial['v_rot'] = xr.DataArray(data = cross_no_inert.data, dims = ["time", "pressure"], attrs = {'description':'cross-stream absolute velocity'})
+
+    if savedir is not None:
+        print('saving file')
+        filename = 'ds_no_inertial'
+        name = filename + f'_{floatid}' + '.nc' 
+        save_to_netCDF(ds_no_inertial, savedir, name)
+
+    return ds_no_inertial
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 def butter_bandpass(lowcut, highcut, fs, order=3):
     nyq = 0.5 * fs

@@ -91,6 +91,27 @@ def spearmans(data1, data2, plot = False):
         print(f'Spearmans corr: {corr:.3f}, p-value: {pval:.5f}')
     return corr, pval
 
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def cross_corr(ax, data1, data2, maxlags = 20, normed=True, **kwargs):
+    '''Cross correlation'''
+    # remove nans 
+    nansx = np.where(np.isnan(data1))[0]
+    nansy = np.where(np.isnan(data2))[0]
+
+    nans = np.unique(np.concatenate((nansx, nansy)))
+
+    x = np.delete(data1, nans)
+    y = np.delete(data2, nans)
+    
+    ax.xcorr(x, y, maxlags=maxlags, normed=normed, usevlines=False, **kwargs)
+    ax.set_title("Cross-Correlation between x and y")
+    ax.set_xlabel("Lag")
+    ax.set_ylabel("Correlation Coefficient")
+    ax.grid(True)
+
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def variance(data):

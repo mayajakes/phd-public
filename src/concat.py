@@ -26,7 +26,7 @@ def concatenated_flts(data, floatids, interp_to_flt = False, interp_to_dens = Fa
     d_rs = {}
     end_dist = {}
     for floatid in floatids:
-        newFloat = settings.distanceAsCoord(ema[floatid], rs = rs)
+        newFloat = settings.distanceAsCoord(ema[floatid])
         end_dist[floatid] = newFloat.distance[-1].data
 
         if rs == True:
@@ -110,7 +110,8 @@ def joinFloats(data_dict, dim_name, new_dim = False):
 
     if new_dim == True:
         if dim_name == 'distance':
-            concat_ds['distance'] = new_dist(data_dict)
+            concat_ds['distance'] = np.cumsum(concat_ds.distance)
+            # concat_ds['distance'] = new_dist(data_dict)
 
     return concat_ds
 

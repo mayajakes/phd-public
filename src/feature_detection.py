@@ -302,11 +302,11 @@ class FeatureDetection:
 
             for prof in profiles:
                 df_sel = c[c['profile'] == prof]
-                
                 if len(df_sel) > 1:
+                    p = np.array(list(df_sel.pressure.values), dtype=float)
                     # find the difference between maximum and minimum pressure values
-                    p_min = np.nanmin(df_sel.pressure)
-                    p_max = np.nanmax(df_sel.pressure)
+                    p_min = np.nanmin(p)
+                    p_max = np.nanmax(p)
                     H = p_max - p_min
                     # # TO DO: deal with features with multiple branches in one profile
                     # pd_grad = np.gradient(df_sel.potential_density)

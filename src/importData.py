@@ -7,13 +7,14 @@ import src.calc as calc
 import src.settings as settings
 import numpy as np
 
-def importFloatData(floatids):
+def importFloatData(floatids, floatdir = None, project = 'macquarie'):
     
-    floatdir = os.path.join(os.sep, 'Users', 'mijakes', 'checkouts', 'phd', 'data', 'floats')
+    if floatdir == None:
+        floatdir = os.path.join(os.sep, 'Users', 'mijakes', 'checkouts', 'phd', 'data', 'floats')
 
     ema = {}
     for floatid in floatids:
-        input_file = os.path.join(floatdir, 'macquarie_ema-%s_qc.nc' %floatid)
+        input_file = os.path.join(floatdir, f'{project}_ema-{floatid}_qc.nc')
         ema[floatid] = xr.open_dataset(input_file)
         
     return ema
@@ -51,7 +52,7 @@ def sub_inertial_ds(ema, floatids, datadir, filename = 'ds_no_inertial_%s_extra_
 
         file_2 = os.path.join(datadir, filename %floatid)
         ds_no_inertial[floatid] = xr.open_dataset(file_2)
-        # CT, SA = settings.remove_bad_T_S(ds_no_inertial[floatid], floatid)
+        CT, SA = settings.remove_bad_T_S(ds_no_inertial[floatid], floatid)
         
         # interpolate back to original x coordinates
         CT_no_inert = interp.interp_time(ds_no_inertial[floatid].CT, float_num.time[rs])
@@ -91,13 +92,68 @@ def sub_inertial_ds(ema, floatids, datadir, filename = 'ds_no_inertial_%s_extra_
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+def sub_inertial_ds_general(ema, floatids, datadir, filename = 'ds_no_inertial', xdim = 'profile', rot_vels = None):
+    '''Import subinertial dataset and interpolate back onto original times. 
+    Updated generalised function to work for other float datasets.'''
+
+    ds_no_inertial = {}
+    ds = {}
+
+    for floatid in floatids:
+        float_num = ema[floatid]
+        rs = calc.findRSperiod(float_num)
+
+        if rot_vels is None:
+            dist = calc.cum_dist(float_num.longitude, float_num.latitude)
+        else:
+            # use bearing lat and lons for distance calculation
+            dist = calc.cum_dist(rot_vels[floatid].brng_lons, rot_vels[floatid].brng_lats)
+
+        file_2 = os.path.join(datadir, filename + '_%s.nc' %floatid)
+        ds_no_inertial[floatid] = xr.open_dataset(file_2)
+
+        # interpolate back to original x coordinates
+        CT_no_inert = interp.interp_time(ds_no_inertial[floatid].CT, float_num.time[rs])
+        SA_no_inert = interp.interp_time(ds_no_inertial[floatid].SA, float_num.time[rs])
+
+        u_abs_no_inert = interp.interp_time(ds_no_inertial[floatid].u_abs, float_num.time[rs])
+        v_abs_no_inert = interp.interp_time(ds_no_inertial[floatid].v_abs, float_num.time[rs])
+
+        if rot_vels is not None:
+            u_rot_no_inert = interp.interp_time(ds_no_inertial[floatid].u_rot, float_num.time[rs])
+            v_rot_no_inert = interp.interp_time(ds_no_inertial[floatid].v_rot, float_num.time[rs])
+
+        ctd_t_no_inert = interp.interp_time(ds_no_inertial[floatid].ctd_t, float_num.time[rs])
+
+        ds[floatid] = xr.Dataset(data_vars=dict(
+                                    CT=([xdim, "pressure"], CT_no_inert.data),
+                                    SA = ([xdim, "pressure"], SA_no_inert.data),
+                                    ctd_t = ([xdim, "pressure"], ctd_t_no_inert.data),
+                                    u_abs = ([xdim, "pressure"], u_abs_no_inert.data, {'description':'absolute eastward velocity'}),
+                                    v_abs = ([xdim, "pressure"], v_abs_no_inert.data, {'description':'absolute northward velocity'}),
+                                    ),
+                                coords = dict(pressure = ('pressure', float_num.pressure.data), 
+                                    time = ('time', float_num.time[rs].data, {'description':'time'}), 
+                                    distance = ('distance', dist[rs].data),
+                                    latitude = (["latitude"], float_num.latitude[rs].data, {'description':'latitude'}),
+                                    longitude = (["longitude"], float_num.longitude[rs].data, {'description':'longitude'})
+                                    ), 
+                                attrs=dict(description=f"{floatid}: Dataset of variables with inertial oscillations removed using half inertial pair averaging, then interpolated back onto original times/locations"),)
+
+        if rot_vels is not None:
+            ds[floatid]['u_rot'] = xr.DataArray(u_rot_no_inert.data, dims = [xdim, "pressure"], attrs = {'description':'along-stream absolute velocity'})
+            ds[floatid]['v_rot'] = xr.DataArray(v_rot_no_inert.data, dims = [xdim, "pressure"], attrs ={'description':'cross-stream absolute velocity'})
+
+    return ds
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def sub_inertial_ds_prev(ema, floatids, datadir, xdim = ('distance', 'profile', 'time')):
     # import subinertial dataset and interpolate back onto original times
 
     ds_no_inertial = {}
     ds = {}
-    CT, SA = {}, {}
+    # CT, SA = {}, {}
 
     for floatid in floatids:
         float_num = ema[floatid]
@@ -106,7 +162,8 @@ def sub_inertial_ds_prev(ema, floatids, datadir, xdim = ('distance', 'profile', 
         
         file_2 = os.path.join(datadir, 'ds_no_inertial_%s.nc' %floatid)
         ds_no_inertial[floatid] = xr.open_dataset(file_2)
-        CT, SA = settings.remove_bad_T_S(ds_no_inertial[floatid], floatid)
+        # CT, SA = settings.remove_bad_T_S(ds_no_inertial[floatid], floatid)
+        CT, SA = ds_no_inertial[floatid].CT, ds_no_inertial[floatid].SA
         
         # interpolate back to original x coordinates
         CT_no_inert = interp.interp_time(CT, float_num.time[rs])
@@ -136,10 +193,7 @@ def sub_inertial_ds_prev(ema, floatids, datadir, xdim = ('distance', 'profile', 
             else:
                 ds[floatid]['u'] = xr.DataArray(u_no_inert.data, dims = [xdim, "pressure"], coords = ds[floatid][xdim].coords, attrs = {'description':'absolute eastward'})
                 ds[floatid]['v'] = xr.DataArray(v_no_inert.data, dims = [xdim, "pressure"], coords = ds[floatid][xdim].coords, attrs = {'description':'absolute northward'})
-                    
-        CT[floatid], SA[floatid] = ds[floatid].CT, ds[floatid].SA
 
-    
     return ds
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

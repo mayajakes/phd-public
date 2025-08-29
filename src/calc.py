@@ -21,13 +21,22 @@ import src.importData as imports
 
 def findRSperiod(float_num):
     '''Find the profile index where the float rapid sampling ends.'''
-    nan_index = np.where(np.isnan(float_num.hpid) == True)
-    over250 = np.where(float_num.profile > 251)
-    rs_end = np.intersect1d(nan_index, over250)
-    if len(rs_end) == 0:
+    # nan_index = np.where(np.isnan(float_num.hpid) == True)
+    # over250 = np.where(float_num.profile > 251)
+    # rs_end = np.intersect1d(nan_index, over250)
+    # if len(rs_end) == 0:
+    #     rs = int(float_num.hpid[-1].data)
+    # else:
+    #     rs = rs_end[0]
+
+    dt = np.gradient(float_num.time).astype('timedelta64[h]').astype('int')
+    rs = np.where(dt > 15)[0]
+
+    if len(rs) == 0:
         rs = int(float_num.hpid[-1].data)
     else:
-        rs = rs_end[0]
+        rs = rs[0]+1
+
     return slice(0,rs)
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -105,12 +114,13 @@ def satellite_eke(ugos, vgos, start_time, end_time):
     ugos, vgos = surface geostrophic velocities derived from satellite sea surface height data
     start_time, end_time = start and end time for calculation of mean velocities (u_bar and v_bar)'''
 
-    start, end = str(start_time.astype('M8[D]')), str(end_time.astype('M8[D]'))
-    print('mean u and v between {} and {}'.format(start, end))
+    if type(start_time) is not str:
+        start_time, end_time = str(start_time.astype('M8[D]')), str(end_time.astype('M8[D]'))
+    print('mean u and v between {} and {}'.format(start_time, end_time))
 
     # mean U and V 
-    u_bar = ugos.sel(time = slice(start,end)).mean(dim = 'time')
-    v_bar = vgos.sel(time = slice(start,end)).mean(dim = 'time')
+    u_bar = ugos.sel(time = slice(start_time,end_time)).mean(dim = 'time')
+    v_bar = vgos.sel(time = slice(start_time,end_time)).mean(dim = 'time')
     # calculate EKE (deviation from mean)
     EKE = eddyKineticEnergy(ugos, vgos, u_bar, v_bar)
 
@@ -960,6 +970,12 @@ def DSC(CT, SA, pdens = None, vert_smooth = False, x_smooth = True, dens_interva
 
     potential_temp = gsw.pt_from_CT(SA, CT)
 
+    if vert_smooth == True:
+        # vertical smoothing to reduce noise (Shcherbina et al., 2009)
+        SA = SA.rolling(pressure = 3, center = True, min_periods = 2).mean()
+        CT = CT.rolling(pressure = 3, center = True, min_periods = 2).mean()
+        potential_temp = potential_temp.rolling(pressure = 3, center = True, min_periods = 2).mean()
+
     if pdens is None:
         print('calculating density...')
         pdens = potentialDensity(SA.pressure, SA, CT)
@@ -982,12 +998,6 @@ def DSC(CT, SA, pdens = None, vert_smooth = False, x_smooth = True, dens_interva
     ## remember -- this is density anomaly (potential density - 1000 kg/m^-3)
     pdens_on_d = interp.to_pdens_grid(pdens, pdens, dens_interval = dens_interval)
     pdens_on_d = pdens_on_d.interp(potential_density = S_on_d.potential_density)
-
-    if vert_smooth == True:
-        # vertical smoothing to reduce noise (Shcherbina et al., 2009)
-        S_on_d = S_on_d.rolling(potential_density = 3, center = True, min_periods = 2).mean()
-        theta_on_d = theta_on_d.rolling(potential_density = 3, center = True, min_periods = 2).mean()
-        pdens_on_d = pdens_on_d.rolling(potential_density = 3, center = True, min_periods = 2).mean()
 
     # vertical derivative of temperature with repsect to density 
     T_z = theta_on_d.differentiate('potential_density')

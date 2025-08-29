@@ -303,7 +303,6 @@ def colTrajectory(ax2, surf_data, float_num, floatid, alt_cmems, rs = True, msl_
         # ax1.scatter(dist[profiles],surf_data[profiles], s = 25)
         ax1.plot(dist[profiles],surf_data[profiles], linewidth = 2)
         
-
     # im = ax2.scatter(float_num.longitude, float_num.latitude, c = 'slategrey', s = 30, alpha = 0.7)
     im2 = ax2.scatter(float_num.longitude[profiles], float_num.latitude[profiles], c = surf_data[profiles], **kwargs, zorder = 2)
 
@@ -330,6 +329,25 @@ def colTrajectory(ax2, surf_data, float_num, floatid, alt_cmems, rs = True, msl_
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+def colTrajectory_general(ax, data, float_num, alt_cmems = None, adt_levels = np.arange(-0.7, 0.5, 0.1), **kwargs):
+
+    start = float_num.time.values[0]
+    end = float_num.time.values[-1]
+    start_time, end_time = str(start.astype('M8[D]')), str(end.astype('M8[D]'))
+
+    im = ax.scatter(float_num.longitude, float_num.latitude, c = data, linewidths = 0.4, edgecolors = 'grey', **kwargs, alpha = 0.8, zorder = 2)
+
+    if alt_cmems is not None:
+        msl = alt_cmems.adt.sel(time = slice(start_time, end_time)).mean(dim = 'time')
+        CS = msl.plot.contour(ax = ax, colors = 'gray', linewidths = 1.5, alpha = 0.5, levels = adt_levels, zorder = 1)
+        plt.clabel(CS, inline=True, fontsize=10, fmt = '%1.1f')
+
+    ax.set_xlabel(u'Longitude [\N{DEGREE SIGN}E]')
+    ax.set_ylabel(u'Latitude [\N{DEGREE SIGN}N]')
+
+    return im
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def concatTickValues(data_dict):
     '''Input: a list of the last distance value of each float.'''
